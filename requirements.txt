@@ -1,8 +1,3 @@
-#### 3. Requirements File
-The `requirements.txt` remains the same as previously provided, but included here for completeness:
-
-<xaiArtifact artifact_id="d3860b0d-ac1f-44d3-bc5b-a5dd41a643e8" artifact_version_id="22a8e16d-ed40-447b-bf94-986317ee06de" title="requirements.txt" contentType="text/plain">
-```plaintext
 streamlit==1.38.0
 pandas==2.2.2
 reportlab==4.2.2
