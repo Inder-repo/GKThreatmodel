@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import json
@@ -22,10 +21,8 @@ logging.basicConfig(filename="threat_modeling_app.log", level=logging.INFO, form
 logger = logging.getLogger(__name__)
 
 # Initialize session state
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.username = ""
-    st.session_state.role = ""
+if "role" not in st.session_state:
+    st.session_state.role = "admin"  # Default to admin for full access
     st.session_state.dfd_elements = []
     st.session_state.dfd_image = None
     st.session_state.theme = "light"
@@ -36,10 +33,7 @@ if "authenticated" not in st.session_state:
 def init_db():
     conn = sqlite3.connect("threat_models.db", check_same_thread=False)
     c = conn.cursor()
-    c.execute("CREATE TABLE IF NOT EXISTS threat_models (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, architecture TEXT, dfd_elements TEXT, threats TEXT, username TEXT, created_at TEXT)")
-    c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, role TEXT)")
-    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)", ("admin", "adminpass", "admin"))
-    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)", ("student", "password", "user"))
+    c.execute("CREATE TABLE IF NOT EXISTS threat_models (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, architecture TEXT, dfd_elements TEXT, threats TEXT, created_at TEXT)")
     conn.commit()
     return conn
 
@@ -95,7 +89,7 @@ def create_json_report(threat_model_name, architecture, dfd_elements, threats, _
         "dfd_elements": dfd_elements,
         "threats": threats,
         "generated_on": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "generated_by": st.session_state.username or "Anonymous"
+        "generated_by": "Anonymous"  # No username since login is removed
     }
     report_json = json.dumps(report, indent=2)
     b64 = base64.b64encode(report_json.encode()).decode()
@@ -195,6 +189,9 @@ theme = st.sidebar.selectbox("Theme", ["Light", "Dark"], index=0 if st.session_s
 if theme.lower() != st.session_state.theme:
     st.session_state.theme = theme.lower()
 
+# Role selection (for testing user vs admin views)
+st.session_state.role = st.sidebar.selectbox("Role", ["admin", "user"], index=0 if st.session_state.role == "admin" else 1)
+
 # Apply dark theme CSS
 if st.session_state.theme == "dark":
     st.markdown("""
@@ -204,202 +201,181 @@ if st.session_state.theme == "dark":
         </style>
     """, unsafe_allow_html=True)
 
-# Authentication
-if not st.session_state.authenticated:
-    st.header("Login")
-    with st.form("login_form"):
-        username = st.text_input("Username", placeholder="e.g., student")
-        password = st.text_input("Password", type="password")
-        if st.form_submit_button("Login"):
-            c = conn.cursor()
-            c.execute("SELECT role FROM users WHERE username = ? AND password = ?", (username, password))
-            result = c.fetchone()
-            if result:
-                st.session_state.authenticated = True
-                st.session_state.username = username
-                st.session_state.role = result[0]
-                logger.info(f"User logged in: {username}")
-                st.rerun()
-            else:
-                st.error("Invalid credentials.")
-                logger.warning(f"Login failed: {username}")
-
 # Main app
-if st.session_state.authenticated:
-    options = ["Pre-defined Models", "Create Model", "Saved Models", "Logout"]
-    if st.session_state.role == "admin":
-        options.append("Manage Users")
-    option = st.sidebar.radio("Options", options)
+options = ["Pre-defined Models", "Create Model", "Saved Models", "Logout"]
+if st.session_state.role == "admin":
+    options.append("Manage Users")
+option = st.sidebar.radio("Options", options)
 
-    if option == "Logout":
-        st.session_state.clear()
-        logger.info("User logged out")
-        st.rerun()
+if option == "Logout":
+    st.session_state.clear()
+    st.session_state.role = "admin"  # Reset to admin
+    logger.info("User logged out")
+    st.rerun()
 
-    elif option == "Pre-defined Models":
-        st.header("Pre-defined Threat Models")
-        for model in pre_defined_threat_models:
-            with st.expander(model["name"]):
-                st.write(f"**Architecture**: {model['architecture']}")
-                df = pd.DataFrame(model["threats"])
-                st.dataframe(df)
-                st.plotly_chart(create_risk_chart(model["threats"], datetime.now().timestamp()))
-                st.markdown(create_json_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
-                st.markdown(create_csv_report(model["name"], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
-                st.markdown(create_pdf_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+elif option == "Pre-defined Models":
+    st.header("Pre-defined Threat Models")
+    for model in pre_defined_threat_models:
+        with st.expander(model["name"]):
+            st.write(f"**Architecture**: {model['architecture']}")
+            df = pd.DataFrame(model["threats"])
+            st.dataframe(df)
+            st.plotly_chart(create_risk_chart(model["threats"], datetime.now().timestamp()))
+            st.markdown(create_json_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+            st.markdown(create_csv_report(model["name"], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+            st.markdown(create_pdf_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
 
-    elif option == "Create Model":
-        st.header("Create Threat Model")
-        st.markdown("Drag Processes, Data Stores, or External Entities to create a DFD.")
+elif option == "Create Model":
+    st.header("Create Threat Model")
+    st.markdown("Drag Processes, Data Stores, or External Entities to create a DFD.")
 
-        # Template selection
-        template = st.selectbox("Template", ["None"] + list(dfd_templates.keys()))
-        if template != "None" and st.button("Load Template"):
-            st.session_state.dfd_elements = dfd_templates[template]
-            st.session_state.last_update = datetime.now().timestamp()
-            logger.info(f"Loaded template: {template}")
+    # Template selection
+    template = st.selectbox("Template", ["None"] + list(dfd_templates.keys()))
+    if template != "None" and st.button("Load Template"):
+        st.session_state.dfd_elements = dfd_templates[template]
+        st.session_state.last_update = datetime.now().timestamp()
+        logger.info(f"Loaded template: {template}")
 
-        # DFD editor
-        with open("dfd_editor.html", "r") as f:
-            html_content = f.read().replace("{{THEME}}", st.session_state.theme)
-        dfd_data = components.html(html_content, height=450)
-        if dfd_data and "elements" in dfd_data:
-            current_time = datetime.now().timestamp()
-            if current_time - st.session_state.last_update > 1:  # Debounce updates (1-second delay)
-                st.session_state.dfd_elements = dfd_data["elements"]
-                st.session_state.last_update = current_time
-                img = PILImage.new("RGB", (800, 400), color="white" if st.session_state.theme == "light" else "#2a2a2a")
-                img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format="PNG")
-                st.session_state.dfd_image = img_byte_arr.getvalue()
+    # DFD editor
+    with open("dfd_editor.html", "r") as f:
+        html_content = f.read().replace("{{THEME}}", st.session_state.theme)
+    dfd_data = components.html(html_content, height=450)
+    if dfd_data and "elements" in dfd_data:
+        current_time = datetime.now().timestamp()
+        if current_time - st.session_state.last_update > 1:  # Debounce updates (1-second delay)
+            st.session_state.dfd_elements = dfd_data["elements"]
+            st.session_state.last_update = current_time
+            img = PILImage.new("RGB", (800, 400), color="white" if st.session_state.theme == "light" else "#2a2a2a")
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format="PNG")
+            st.session_state.dfd_image = img_byte_arr.getvalue()
 
-        # Annotate elements
-        if st.session_state.dfd_elements and dfd_data and "selected" in dfd_data:
-            selected_id = dfd_data["selected"]
-            selected_element = next((e for e in st.session_state.dfd_elements if e["id"] == selected_id), None)
-            if selected_element:
-                with st.form("dfd_form"):
-                    st.markdown(f"Editing: {selected_element['name']} ({selected_element['type']})")
-                    element_name = st.text_input("Name", value=selected_element["name"], placeholder="e.g., Web Server")
-                    technology = st.text_input("Technology", value=selected_element.get("technology", ""), placeholder="e.g., Node.js")
-                    data_flow = st.text_input("Data Flow", value=selected_element.get("data_flow", ""), placeholder="e.g., HTTP request") if selected_element["type"] == "Data Flow" else ""
-                    if st.form_submit_button("Update"):
-                        valid, error = validate_input(element_name, "Name")
-                        if valid:
-                            for elem in st.session_state.dfd_elements:
-                                if elem["id"] == selected_id:
-                                    elem.update({"name": element_name, "technology": technology, "data_flow": data_flow})
-                            logger.info(f"Updated element: {element_name}")
-                            st.success("Element updated!")
-                        else:
-                            st.error(error)
-
-        # Display DFD elements
-        if st.session_state.dfd_elements:
-            st.subheader("DFD Elements")
-            st.dataframe(pd.DataFrame([
-                {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
-                for elem in st.session_state.dfd_elements
-            ]))
-
-        # Generate threat model
-        with st.form("threat_model_form"):
-            threat_model_name = st.text_input("Name", placeholder="e.g., My App")
-            architecture = st.text_area("Architecture", placeholder="Describe your system")
-            if st.form_submit_button("Generate"):
-                validations = [
-                    validate_input(threat_model_name, "Name"),
-                    validate_input(architecture, "Architecture"),
-                    validate_dfd(st.session_state.dfd_elements) if st.session_state.dfd_elements else (False, "Add DFD elements.")
-                ]
-                if all(v[0] for v in validations):
-                    threats = generate_threat_model(st.session_state.dfd_elements, architecture, stride_library)
-                    st.subheader(f"Threat Model: {threat_model_name}")
-                    st.write(f"**Architecture**: {architecture}")
-                    if st.session_state.dfd_image:
-                        st.image(st.session_state.dfd_image)
-                    st.write("**DFD Elements**:")
-                    st.dataframe(pd.DataFrame([
-                        {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
-                        for elem in st.session_state.dfd_elements
-                    ]))
-                    st.write("**Threats**:")
-                    df = pd.DataFrame(threats)
-                    st.dataframe(df)
-                    timestamp = datetime.now().timestamp()
-                    st.plotly_chart(create_risk_chart(threats, timestamp))
-                    st.markdown(create_json_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
-                    st.markdown(create_csv_report(threat_model_name, threats, timestamp), unsafe_allow_html=True)
-                    st.markdown(create_pdf_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
-
-                    c = conn.cursor()
-                    c.execute("INSERT INTO threat_models (name, architecture, dfd_elements, threats, username, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                              (threat_model_name, architecture, json.dumps(st.session_state.dfd_elements), json.dumps(threats), st.session_state.username, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-                    conn.commit()
-                    st.success("Threat model saved!")
-                else:
-                    for _, error in validations:
+    # Annotate elements
+    if st.session_state.dfd_elements and dfd_data and "selected" in dfd_data:
+        selected_id = dfd_data["selected"]
+        selected_element = next((e for e in st.session_state.dfd_elements if e["id"] == selected_id), None)
+        if selected_element:
+            with st.form("dfd_form"):
+                st.markdown(f"Editing: {selected_element['name']} ({selected_element['type']})")
+                element_name = st.text_input("Name", value=selected_element["name"], placeholder="e.g., Web Server")
+                technology = st.text_input("Technology", value=selected_element.get("technology", ""), placeholder="e.g., Node.js")
+                data_flow = st.text_input("Data Flow", value=selected_element.get("data_flow", ""), placeholder="e.g., HTTP request") if selected_element["type"] == "Data Flow" else ""
+                if st.form_submit_button("Update"):
+                    valid, error = validate_input(element_name, "Name")
+                    if valid:
+                        for elem in st.session_state.dfd_elements:
+                            if elem["id"] == selected_id:
+                                elem.update({"name": element_name, "technology": technology, "data_flow": data_flow})
+                        logger.info(f"Updated element: {element_name}")
+                        st.success("Element updated!")
+                    else:
                         st.error(error)
 
-    elif option == "Saved Models":
-        st.header("Saved Threat Models")
-        c = conn.cursor()
-        c.execute("SELECT id, name, architecture, dfd_elements, threats, username, created_at FROM threat_models WHERE username = ? OR ? = 'admin'",
-                 (st.session_state.username, st.session_state.role))
-        models = c.fetchall()
-        if models:
-            for model_id, name, architecture, dfd_elements, threats, username, created_at in models:
-                with st.expander(f"{name} (by {username}, {created_at})"):
-                    st.write(f"**Architecture**: {architecture}")
-                    dfd_elements = json.loads(dfd_elements)
-                    threats = json.loads(threats)
-                    st.dataframe(pd.DataFrame([
-                        {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
-                        for elem in dfd_elements
-                    ]))
-                    st.dataframe(pd.DataFrame(threats))
-                    timestamp = datetime.now().timestamp()
-                    st.plotly_chart(create_risk_chart(threats, timestamp))
-                    st.markdown(create_json_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
-                    st.markdown(create_csv_report(name, threats, timestamp), unsafe_allow_html=True)
-                    st.markdown(create_pdf_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
-                    if st.session_state.role == "admin" or username == st.session_state.username:
-                        if st.button(f"Delete", key=f"delete_{model_id}"):
-                            c.execute("DELETE FROM threat_models WHERE id = ?", (model_id,))
-                            conn.commit()
-                            logger.info(f"Deleted model: {name}")
-                            st.rerun()
-        else:
-            st.info("No saved models.")
+    # Display DFD elements
+    if st.session_state.dfd_elements:
+        st.subheader("DFD Elements")
+        st.dataframe(pd.DataFrame([
+            {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
+            for elem in st.session_state.dfd_elements
+        ]))
 
-    elif option == "Manage Users" and st.session_state.role == "admin":
-        st.header("Manage Users")
-        with st.form("user_form"):
-            new_username = st.text_input("Username")
-            new_password = st.text_input("Password", type="password")
-            new_role = st.selectbox("Role", ["user", "admin"])
-            if st.form_submit_button("Add User"):
-                valid, error = validate_input(new_username, "Username", 50)
-                if valid:
-                    c = conn.cursor()
-                    c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)", (new_username, new_password, new_role))
-                    conn.commit()
-                    st.success(f"User {new_username} added!")
-                    logger.info(f"Added user: {new_username}")
-                else:
+    # Generate threat model
+    with st.form("threat_model_form"):
+        threat_model_name = st.text_input("Name", placeholder="e.g., My App")
+        architecture = st.text_area("Architecture", placeholder="Describe your system")
+        if st.form_submit_button("Generate"):
+            validations = [
+                validate_input(threat_model_name, "Name"),
+                validate_input(architecture, "Architecture"),
+                validate_dfd(st.session_state.dfd_elements) if st.session_state.dfd_elements else (False, "Add DFD elements.")
+            ]
+            if all(v[0] for v in validations):
+                threats = generate_threat_model(st.session_state.dfd_elements, architecture, stride_library)
+                st.subheader(f"Threat Model: {threat_model_name}")
+                st.write(f"**Architecture**: {architecture}")
+                if st.session_state.dfd_image:
+                    st.image(st.session_state.dfd_image)
+                st.write("**DFD Elements**:")
+                st.dataframe(pd.DataFrame([
+                    {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
+                    for elem in st.session_state.dfd_elements
+                ]))
+                st.write("**Threats**:")
+                df = pd.DataFrame(threats)
+                st.dataframe(df)
+                timestamp = datetime.now().timestamp()
+                st.plotly_chart(create_risk_chart(threats, timestamp))
+                st.markdown(create_json_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                st.markdown(create_csv_report(threat_model_name, threats, timestamp), unsafe_allow_html=True)
+                st.markdown(create_pdf_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
+
+                c = conn.cursor()
+                c.execute("INSERT INTO threat_models (name, architecture, dfd_elements, threats, created_at) VALUES (?, ?, ?, ?, ?)",
+                          (threat_model_name, architecture, json.dumps(st.session_state.dfd_elements), json.dumps(threats), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                conn.commit()
+                st.success("Threat model saved!")
+            else:
+                for _, error in validations:
                     st.error(error)
 
-        c = conn.cursor()
-        c.execute("SELECT username, role FROM users")
-        users = c.fetchall()
-        for username, role in users:
-            st.write(f"Username: {username}, Role: {role}")
-            if username != st.session_state.username:
-                if st.button(f"Delete {username}", key=f"delete_user_{username}"):
-                    c.execute("DELETE FROM users WHERE username = ?", (username,))
-                    conn.commit()
-                    logger.info(f"Deleted user: {username}")
-                    st.rerun()
+elif option == "Saved Models":
+    st.header("Saved Threat Models")
+    c = conn.cursor()
+    c.execute("SELECT id, name, architecture, dfd_elements, threats, created_at FROM threat_models")
+    models = c.fetchall()
+    if models:
+        for model_id, name, architecture, dfd_elements, threats, created_at in models:
+            with st.expander(f"{name} ({created_at})"):
+                st.write(f"**Architecture**: {architecture}")
+                dfd_elements = json.loads(dfd_elements)
+                threats = json.loads(threats)
+                st.dataframe(pd.DataFrame([
+                    {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
+                    for elem in dfd_elements
+                ]))
+                st.dataframe(pd.DataFrame(threats))
+                timestamp = datetime.now().timestamp()
+                st.plotly_chart(create_risk_chart(threats, timestamp))
+                st.markdown(create_json_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                st.markdown(create_csv_report(name, threats, timestamp), unsafe_allow_html=True)
+                st.markdown(create_pdf_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                if st.session_state.role == "admin":
+                    if st.button(f"Delete", key=f"delete_{model_id}"):
+                        c.execute("DELETE FROM threat_models WHERE id = ?", (model_id,))
+                        conn.commit()
+                        logger.info(f"Deleted model: {name}")
+                        st.rerun()
+    else:
+        st.info("No saved models.")
+
+elif option == "Manage Users" and st.session_state.role == "admin":
+    st.header("Manage Users")
+    with st.form("user_form"):
+        new_username = st.text_input("Username")
+        new_password = st.text_input("Password", type="password")
+        new_role = st.selectbox("Role", ["user", "admin"])
+        if st.form_submit_button("Add User"):
+            valid, error = validate_input(new_username, "Username", 50)
+            if valid:
+                c = conn.cursor()
+                c.execute("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, role TEXT)")
+                c.execute("INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)", (new_username, new_password, new_role))
+                conn.commit()
+                st.success(f"User {new_username} added!")
+                logger.info(f"Added user: {new_username}")
+            else:
+                st.error(error)
+
+    c = conn.cursor()
+    c.execute("SELECT username, role FROM users")
+    users = c.fetchall()
+    for username, role in users:
+        st.write(f"Username: {username}, Role: {role}")
+        if st.button(f"Delete {username}", key=f"delete_user_{username}"):
+            c.execute("DELETE FROM users WHERE username = ?", (username,))
+            conn.commit()
+            logger.info(f"Deleted user: {username}")
+            st.rerun()
 
 # Clean up temporary files
 for file in os.listdir():
