@@ -1,30 +1,33 @@
+
+#### 2. Drag-and-Drop Editor (`dfd_editor.html`)
+This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce updates sent to Streamlit, improving performance.
+
+<xaiArtifact artifact_id="442a948b-504d-460e-9ca5-5a64ec0c6f15" artifact_version_id="9dab2792-2be7-4423-8f9f-3733e1b08eab" title="dfd_editor.html" contentType="text/html">
 ```html
 <!DOCTYPE html>
 <html>
 <head>
     <style>
-        body { margin: 0; font-family: Arial, sans-serif; }
-        .toolbar { background: #f0f0f0; padding: 10px; border-bottom: 1px solid #ccc; }
-        .toolbar button { margin: 5px; padding: 8px; cursor: move; }
-        .canvas { width: 800px; height: 400px; border: 1px solid #000; position: relative; background: #fff; }
+        body { margin: 0; font-family: Arial; }
+        .toolbar { background: #f0f0f0; padding: 5px; border-bottom: 1px solid #ccc; }
+        .toolbar button { margin: 3px; padding: 5px; cursor: move; }
+        .canvas { width: 600px; height: 300px; border: 1px solid #000; position: relative; background: #fff; }
         .canvas.dark { background: #2a2a2a; }
-        .element { position: absolute; border: 1px solid #000; text-align: center; line-height: 30px; cursor: move; }
-        .process { width: 60px; height: 60px; border-radius: 50%; background: #aaffaa; }
-        .data-store { width: 100px; height: 40px; background: #aaaaff; }
-        .external-entity { width: 100px; height: 40px; background: #ffaaaa; }
-        .trust-boundary { border: 2px dashed #000; background: none; }
+        .element { position: absolute; border: 1px solid #000; text-align: center; line-height: 20px; cursor: move; font-size: 12px; }
+        .process { width: 40px; height: 40px; border-radius: 50%; background: #aaffaa; }
+        .data-store { width: 80px; height: 30px; background: #aaaaff; }
+        .external-entity { width: 80px; height: 30px; background: #ffaaaa; }
         .selected { border: 2px solid red; }
-        svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        svg { position: absolute; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
     <div class="toolbar">
         <button draggable="true" data-type="Process">Process</button>
         <button draggable="true" data-type="Data Store">Data Store</button>
-        <button draggable="true" data-type="External Entity">External Entity</button>
-        <button draggable="true" data-type="Trust Boundary">Trust Boundary</button>
+        <button draggable="true" data-type="External Entity">Entity</button>
         <button onclick="startDrawingArrow()">Data Flow</button>
-        <button onclick="clearCanvas()">Clear Canvas</button>
+        <button onclick="clearCanvas()">Clear</button>
     </div>
     <div id="canvas" class="canvas"></div>
     <svg id="arrows"></svg>
@@ -34,16 +37,14 @@
         let selectedElement = null;
         let drawingArrow = false;
         let arrowStart = null;
+        let lastUpdate = 0;
         const canvas = document.getElementById('canvas');
         const arrowsSvg = document.getElementById('arrows');
 
         // Apply theme
-        function applyTheme(theme) {
-            canvas.classList.toggle('dark', theme === 'dark');
-        }
-        applyTheme('{{THEME}}');
+        canvas.classList.toggle('dark', '{{THEME}}' === 'dark');
 
-        // Drag and Drop
+        // Drag and drop
         document.querySelectorAll('.toolbar button').forEach(button => {
             button.addEventListener('dragstart', e => e.dataTransfer.setData('type', e.target.dataset.type));
         });
@@ -54,11 +55,11 @@
             const type = e.dataTransfer.getData('type');
             if (type && type !== 'Data Flow') {
                 const id = 'elem_' + Date.now();
-                const x = e.offsetX - (type === 'Process' ? 30 : 50);
-                const y = e.offsetY - (type === 'Process' ? 30 : 20);
-                const width = type === 'Trust Boundary' ? 150 : (type === 'Process' ? 60 : 100);
-                const height = type === 'Trust Boundary' ? 100 : (type === 'Process' ? 60 : 40);
-                const element = { id, type, name: type + '_' + elements.length, x, y, width, height, technology: '', data_flow: '', trust_boundary: '' };
+                const x = e.offsetX - (type === 'Process' ? 20 : 40);
+                const y = e.offsetY - (type === 'Process' ? 20 : 15);
+                const width = type === 'Process' ? 40 : 80;
+                const height = type === 'Process' ? 40 : 30;
+                const element = { id, type, name: type + '_' + elements.length, x, y, width, height, technology: '', data_flow: '' };
                 elements.push(element);
                 addElementToCanvas(element);
                 sendDataToStreamlit();
@@ -99,7 +100,7 @@
             if (selectedElement) document.getElementById(selectedElement).classList.remove('selected');
             selectedElement = id;
             document.getElementById(id).classList.add('selected');
-            window.Streamlit.setComponentValue({ selected: id });
+            sendDataToStreamlit();
         }
 
         function startDrawingArrow() {
@@ -114,7 +115,7 @@
             const element = elements.find(el => 
                 x >= el.x && x <= el.x + el.width && 
                 y >= el.y && y <= el.y + el.height && 
-                el.type !== 'Trust Boundary' && el.type !== 'Data Flow'
+                el.type !== 'Data Flow'
             );
             if (element) {
                 if (!arrowStart) {
@@ -125,7 +126,7 @@
                         source: arrowStart.name,
                         target: element.name,
                         type: 'Data Flow',
-                        name: 'Data Flow_' + arrows.length,
+                        name: 'Flow_' + arrows.length,
                         data_flow: 'Data Flow'
                     };
                     arrows.push(arrow);
@@ -149,14 +150,14 @@
                 line.setAttribute('x2', target.x + target.width / 2);
                 line.setAttribute('y2', target.y + target.height / 2);
                 line.setAttribute('stroke', 'black');
-                line.setAttribute('stroke-width', '2');
+                line.setAttribute('stroke-width', '1');
                 line.setAttribute('marker-end', 'url(#arrowhead)');
                 arrowsSvg.appendChild(line);
             }
         }
 
         function updateArrows() {
-            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" /></marker></defs>';
+            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
             arrows.forEach(drawArrow);
         }
 
@@ -164,28 +165,25 @@
             elements = [];
             arrows = [];
             canvas.innerHTML = '';
-            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" /></marker></defs>';
+            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
             sendDataToStreamlit();
         }
 
         function sendDataToStreamlit() {
-            window.Streamlit.setComponentValue({ elements: elements.concat(arrows) });
+            if (Date.now() - lastUpdate < 1000) return; // Debounce updates (1-second delay)
+            lastUpdate = Date.now();
+            window.Streamlit.setComponentValue({ elements: elements.concat(arrows), selected: selectedElement });
         }
 
-        function loadElements(dfd_elements) {
-            elements = dfd_elements.filter(el => el.type !== 'Data Flow');
-            arrows = dfd_elements.filter(el => el.type === 'Data Flow');
-            canvas.innerHTML = '';
-            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" /></marker></defs>';
-            elements.forEach(addElementToCanvas);
-            arrows.forEach(drawArrow);
-            sendDataToStreamlit();
-        }
-
-        // Load initial elements from Streamlit
         window.addEventListener('message', e => {
             if (e.data.type === 'LOAD_ELEMENTS') {
-                loadElements(e.data.elements);
+                elements = e.data.elements.filter(el => el.type !== 'Data Flow');
+                arrows = e.data.elements.filter(el => el.type === 'Data Flow');
+                canvas.innerHTML = '';
+                arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
+                elements.forEach(addElementToCanvas);
+                arrows.forEach(drawArrow);
+                sendDataToStreamlit();
             }
         });
     </script>
