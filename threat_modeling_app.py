@@ -1,5 +1,5 @@
+```python
 import streamlit as st
-import pandas as pd
 import json
 import base64
 import logging
@@ -22,11 +22,117 @@ logger = logging.getLogger(__name__)
 
 # Initialize session state
 if "role" not in st.session_state:
-    st.session_state.role = "admin"  # Default to admin for full access
+    st.session_state.role = "admin"
     st.session_state.dfd_elements = []
     st.session_state.dfd_image = None
     st.session_state.theme = "light"
     st.session_state.last_update = 0
+    st.session_state.tutorial_step = 0
+    st.session_state.quiz_answers = {}
+
+# Apply Cloudscape-inspired CSS
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&display=swap');
+    .stApp {
+        font-family: 'Noto Sans', sans-serif;
+        background-color: #f8f9fa;
+        color: #0f1a44;
+    }
+    .stButton > button {
+        background-color: #0073bb;
+        color: white;
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: 500;
+        border: none;
+        transition: background-color 0.2s ease-in-out;
+        margin: 4px;
+    }
+    .stButton > button:hover {
+        background-color: #005ea2;
+    }
+    .stButton > button.secondary {
+        background-color: #ffffff;
+        color: #0f1a44;
+        border: 1px solid #0073bb;
+    }
+    .stButton > button.secondary:hover {
+        background-color: #e9ecef;
+    }
+    .stTextInput > div > input, .stSelectbox > div > select, .stTextArea > div > textarea {
+        border: 1px solid #d5dbdb;
+        border-radius: 4px;
+        padding: 8px;
+        background-color: white;
+        color: #0f1a44;
+        transition: border-color 0.2s;
+    }
+    .stTextInput > div > input:focus, .stSelectbox > div > select:focus, .stTextArea > div > textarea:focus {
+        border-color: #0073bb;
+        box-shadow: 0 0 0 2px rgba(0, 115, 187, 0.3);
+    }
+    .stSidebar {
+        background-color: #ffffff;
+        border-right: 1px solid #d5dbdb;
+        padding: 16px;
+    }
+    .stSidebar h2 {
+        color: #0f1a44;
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 16px;
+    }
+    .stExpander {
+        border: 1px solid #d5dbdb;
+        border-radius: 4px;
+        background-color: #ffffff;
+        margin-bottom: 8px;
+    }
+    .stExpander > div > div {
+        padding: 8px 16px;
+    }
+    h1, h2, h3 {
+        color: #0f1a44;
+        font-weight: 700;
+        margin-top: 16px;
+    }
+    .aws-divider {
+        border-top: 1px solid #d5dbdb;
+        margin: 16px 0;
+    }
+    .stTable {
+        border-collapse: collapse;
+        width: 100%;
+        background-color: #ffffff;
+        border: 1px solid #d5dbdb;
+        border-radius: 4px;
+    }
+    .stTable th, .stTable td {
+        border: 1px solid #d5dbdb;
+        padding: 8px;
+        text-align: left;
+    }
+    .stTable th {
+        background-color: #e9ecef;
+        font-weight: 500;
+        color: #0f1a44;
+    }
+    .aws-button {
+        display: inline-block;
+        padding: 8px 16px;
+        background-color: #0073bb;
+        color: white;
+        border-radius: 4px;
+        text-decoration: none;
+        font-weight: 500;
+        margin-right: 8px;
+    }
+    .aws-button:hover {
+        background-color: #005ea2;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Cache SQLite connection
 @st.cache_resource
@@ -42,19 +148,19 @@ def init_db():
 def load_static_data():
     stride_library = {
         "Spoofing": [
-            {"threat": "Unauthorized impersonation", "vulnerability": "Weak passwords", "risk": "High", "mitigation": "MFA, strong passwords", "compliance": "NIST 800-63B"}
+            {"threat": "Unauthorized impersonation", "vulnerability": "Weak authentication", "risk": "High", "mitigation": "Implement MFA, strong passwords", "compliance": "NIST 800-63B", "example": "An attacker uses stolen credentials to access a banking portal."}
         ],
         "Tampering": [
-            {"threat": "Data modification", "vulnerability": "No encryption", "risk": "High", "mitigation": "TLS, integrity checks", "compliance": "NIST 800-53 SC-8"}
+            {"threat": "Data modification", "vulnerability": "Lack of integrity checks", "risk": "High", "mitigation": "Use TLS, checksums", "compliance": "NIST 800-53 SC-8", "example": "An attacker alters transaction data in an unencrypted API call."}
         ],
         "Information Disclosure": [
-            {"threat": "Data exposure", "vulnerability": "Unencrypted channels", "risk": "High", "mitigation": "TLS 1.3", "compliance": "GDPR Article 32"}
+            {"threat": "Data exposure", "vulnerability": "Unencrypted channels", "risk": "High", "mitigation": "Use TLS 1.3, encrypt data at rest", "compliance": "GDPR Article 32", "example": "SQL injection exposes user data from a database."}
         ],
         "Denial of Service": [
-            {"threat": "DDoS attack", "vulnerability": "No DDoS protection", "risk": "High", "mitigation": "Cloudflare, auto-scaling", "compliance": "ISO 27001 A.12.1.3"}
+            {"threat": "DDoS attack", "vulnerability": "No rate limiting", "risk": "High", "mitigation": "Implement Cloudflare, rate limiting", "compliance": "ISO 27001 A.12.1.3", "example": "A botnet floods an e-commerce site, causing downtime."}
         ],
         "Elevation of Privilege": [
-            {"threat": "Privilege escalation", "vulnerability": "Insecure RBAC", "risk": "Critical", "mitigation": "Least privilege", "compliance": "NIST 800-53 AC-6"}
+            {"threat": "Privilege escalation", "vulnerability": "Insecure RBAC", "risk": "Critical", "mitigation": "Apply least privilege, audit roles", "compliance": "NIST 800-53 AC-6", "example": "An attacker exploits a misconfigured role to gain admin access."}
         ]
     }
     pre_defined_threat_models = [
@@ -68,6 +174,24 @@ def load_static_data():
                 stride_library["Denial of Service"][0],
                 stride_library["Elevation of Privilege"][0]
             ]
+        },
+        {
+            "name": "IoT Smart Home",
+            "architecture": "IoT devices with MQTT, cloud backend on Azure",
+            "threats": [
+                stride_library["Spoofing"][0],
+                stride_library["Information Disclosure"][0],
+                stride_library["Denial of Service"][0]
+            ]
+        },
+        {
+            "name": "Mobile Banking App",
+            "architecture": "Mobile app with REST API, PostgreSQL on GCP",
+            "threats": [
+                stride_library["Tampering"][0],
+                stride_library["Information Disclosure"][0],
+                stride_library["Elevation of Privilege"][0]
+            ]
         }
     ]
     dfd_templates = {
@@ -76,6 +200,18 @@ def load_static_data():
             {"type": "Process", "name": "Web Server", "technology": "Node.js", "x": 200, "y": 150},
             {"type": "Data Store", "name": "Database", "technology": "MySQL", "x": 350, "y": 150},
             {"type": "Data Flow", "name": "User Request", "data_flow": "HTTP request", "source": "User", "target": "Web Server"}
+        ],
+        "IoT System": [
+            {"type": "External Entity", "name": "User", "technology": "Mobile App", "x": 50, "y": 50},
+            {"type": "Process", "name": "IoT Gateway", "technology": "MQTT", "x": 200, "y": 150},
+            {"type": "Data Store", "name": "Cloud Storage", "technology": "Azure Blob", "x": 350, "y": 150},
+            {"type": "Data Flow", "name": "Sensor Data", "data_flow": "MQTT publish", "source": "User", "target": "IoT Gateway"}
+        ],
+        "Mobile App": [
+            {"type": "External Entity", "name": "User", "technology": "Mobile Device", "x": 50, "y": 50},
+            {"type": "Process", "name": "API Server", "technology": "REST API", "x": 200, "y": 150},
+            {"type": "Data Store", "name": "Database", "technology": "PostgreSQL", "x": 350, "y": 150},
+            {"type": "Data Flow", "name": "API Request", "data_flow": "HTTPS", "source": "User", "target": "API Server"}
         ]
     }
     return stride_library, pre_defined_threat_models, dfd_templates
@@ -89,25 +225,25 @@ def create_json_report(threat_model_name, architecture, dfd_elements, threats, _
         "dfd_elements": dfd_elements,
         "threats": threats,
         "generated_on": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "generated_by": "Anonymous"  # No username since login is removed
+        "generated_by": "Anonymous"
     }
     report_json = json.dumps(report, indent=2)
     b64 = base64.b64encode(report_json.encode()).decode()
-    return f'<a href="data:application/json;base64,{b64}" download="{threat_model_name}_report.json">Download JSON Report</a>'
+    return f'<a href="data:application/json;base64,{b64}" download="{threat_model_name}_report.json" class="aws-button">Download JSON Report</a>'
 
 @st.cache_data
 def create_csv_report(threat_model_name, threats, _timestamp):
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Threat", "Vulnerability", "Risk", "Mitigation", "Compliance"])
+    writer.writerow(["Threat", "Vulnerability", "Risk", "Mitigation", "Compliance", "Example"])
     for threat in threats:
-        writer.writerow([threat["threat"], threat["vulnerability"], threat["risk"], threat["mitigation"], threat["compliance"]])
+        writer.writerow([threat["threat"], threat["vulnerability"], threat["risk"], threat["mitigation"], threat["compliance"], threat["example"]])
     csv_data = output.getvalue().encode()
     b64 = base64.b64encode(csv_data).decode()
-    return f'<a href="data:application/csv;base64,{b64}" download="{threat_model_name}_report.csv">Download CSV Report</a>'
+    return f'<a href="data:application/csv;base64,{b64}" download="{threat_model_name}_report.csv" class="aws-button">Download CSV Report</a>'
 
 @st.cache_data
-def create_pdf_report(threat_model_name, architecture, dfd_elements, threats, _timestamp):
+def create_pdf_report(threat_model_name, architecture, dfd_elements, threats, dfd_image, _timestamp):
     filename = f"temp_{threat_model_name}_report.pdf"
     doc = SimpleDocTemplate(filename, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -117,8 +253,8 @@ def create_pdf_report(threat_model_name, architecture, dfd_elements, threats, _t
         Paragraph(f"Architecture: {architecture}", styles["Normal"]),
         Spacer(1, 12),
         Paragraph("Threats", styles["Heading2"]),
-        Table([["Threat", "Vulnerability", "Risk", "Mitigation", "Compliance"]] + [
-            [threat["threat"], threat["vulnerability"], threat["risk"], threat["mitigation"], threat["compliance"]]
+        Table([["Threat", "Vulnerability", "Risk", "Mitigation", "Compliance", "Example"]] + [
+            [threat["threat"], threat["vulnerability"], threat["risk"], threat["mitigation"], threat["compliance"], threat["example"]]
             for threat in threats
         ], style=[
             ("BACKGROUND", (0, 0), (-1, 0), colors.grey),
@@ -128,12 +264,18 @@ def create_pdf_report(threat_model_name, architecture, dfd_elements, threats, _t
             ("GRID", (0, 0), (-1, -1), 1, colors.black)
         ])
     ]
+    if dfd_image:
+        img = PILImage.open(io.BytesIO(dfd_image))
+        img = img.resize((400, 200))
+        story.insert(2, Spacer(1, 12))
+        story.insert(2, Paragraph("DFD Diagram", styles["Heading2"]))
+        story.insert(3, reportlab.platypus.Image(io.BytesIO(dfd_image), width=400, height=200))
     doc.build(story)
     with open(filename, "rb") as f:
         pdf_data = f.read()
     b64 = base64.b64encode(pdf_data).decode()
     os.remove(filename)
-    return f'<a href="data:application/pdf;base64,{b64}" download="{threat_model_name}_report.pdf">Download PDF Report</a>'
+    return f'<a href="data:application/pdf;base64,{b64}" download="{threat_model_name}_report.pdf" class="aws-button">Download PDF Report</a>'
 
 @st.cache_data
 def create_risk_chart(threats, _timestamp):
@@ -141,7 +283,16 @@ def create_risk_chart(threats, _timestamp):
     for threat in threats:
         risk_counts[threat["risk"]] += 1
     df = pd.DataFrame(list(risk_counts.items()), columns=["Risk Level", "Count"])
-    return px.bar(df, x="Risk Level", y="Count", title="Risk Distribution", color="Risk Level")
+    fig = px.bar(df, x="Risk Level", y="Count", title="Risk Distribution", color="Risk Level")
+    fig.update_layout(
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        font_color="#0f1a44",
+        title_font_color="#0f1a44",
+        title_font_size=16,
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
+    return fig
 
 # Validation and threat generation
 def validate_input(value, field_name, max_length=100):
@@ -165,7 +316,14 @@ def generate_threat_model(dfd_elements, architecture, stride_library):
         threats.append(stride_library["Information Disclosure"][0])
     if any(e["type"] == "Data Flow" for e in dfd_elements):
         threats.append(stride_library["Tampering"][0])
-    keywords = {"web": ["Spoofing"], "database": ["Information Disclosure"], "api": ["Denial of Service"]}
+    keywords = {
+        "web": ["Spoofing", "Tampering"],
+        "database": ["Information Disclosure"],
+        "api": ["Denial of Service"],
+        "iot": ["Spoofing", "Information Disclosure"],
+        "mobile": ["Tampering", "Elevation of Privilege"],
+        "cloud": ["Denial of Service", "Information Disclosure"]
+    }
     architecture_lower = architecture.lower()
     for keyword, threat_types in keywords.items():
         if keyword in architecture_lower or any(keyword in e.get("technology", "").lower() for e in dfd_elements):
@@ -180,87 +338,228 @@ stride_library, pre_defined_threat_models, dfd_templates = load_static_data()
 conn = init_db()
 
 # Streamlit app
-st.set_page_config(page_title="Threat Modeling", layout="wide")
-st.title("Threat Modeling Platform")
-st.markdown("Create STRIDE-based threat models with a drag-and-drop DFD editor.")
+st.set_page_config(page_title="Learn Threat Modeling", layout="wide")
+st.markdown('<h1 style="color: #0f1a44;">Learn Threat Modeling</h1>', unsafe_allow_html=True)
+st.markdown("Master STRIDE-based threat modeling with an interactive DFD editor and guided tutorials.")
+st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
 
 # Theme toggle
-theme = st.sidebar.selectbox("Theme", ["Light", "Dark"], index=0 if st.session_state.theme == "light" else 1)
+theme = st.sidebar.selectbox("Theme", ["Light", "Dark"], index=0 if st.session_state.theme == "light" else 1, label_visibility="collapsed")
 if theme.lower() != st.session_state.theme:
     st.session_state.theme = theme.lower()
 
-# Role selection (for testing user vs admin views)
-st.session_state.role = st.sidebar.selectbox("Role", ["admin", "user"], index=0 if st.session_state.role == "admin" else 1)
+# Role selection
+st.session_state.role = st.sidebar.selectbox("Role", ["admin", "user"], index=0 if st.session_state.role == "admin" else 1, label_visibility="collapsed")
 
 # Apply dark theme CSS
 if st.session_state.theme == "dark":
     st.markdown("""
         <style>
-        .stApp { background-color: #1a1a1a; color: #ffffff; }
-        .stTextInput > div > input, .stSelectbox > div > select { background-color: #2a2a2a; color: #ffffff; }
+        .stApp { background-color: #0f1a44; color: #ffffff; }
+        .stSidebar { background-color: #1a2a6c; border-right: 1px solid #3b4a8b; }
+        .stTextInput > div > input, .stSelectbox > div > select, .stTextArea > div > textarea { background-color: #2a3a7b; color: #ffffff; border: 1px solid #3b4a8b; }
+        .stTextInput > div > input:focus, .stSelectbox > div > select:focus, .stTextArea > div > textarea:focus { border-color: #ff6200; box-shadow: 0 0 0 2px rgba(255, 98, 0, 0.3); }
+        .stButton > button { background-color: #0073bb; }
+        .stButton > button:hover { background-color: #005ea2; }
+        .stButton > button.secondary { background-color: #2a3a7b; color: #ffffff; border: 1px solid #3b4a8b; }
+        .stButton > button.secondary:hover { background-color: #3b4a8b; }
+        .stExpander { background-color: #1a2a6c; border: 1px solid #3b4a8b; }
+        .stTable { background-color: #1a2a6c; border: 1px solid #3b4a8b; }
+        .stTable th { background-color: #3b4a8b; color: #ffffff; }
+        .stTable td { color: #ffffff; }
+        .aws-button { background-color: #0073bb; }
+        .aws-button:hover { background-color: #005ea2; }
+        h1, h2, h3 { color: #ffffff; }
+        .aws-divider { border-top: 1px solid #3b4a8b; }
         </style>
     """, unsafe_allow_html=True)
 
+# Interactive Tutorial
+def show_tutorial():
+    st.sidebar.markdown('<h2 style="color: #0f1a44;">Tutorial: Learn Threat Modeling</h2>', unsafe_allow_html=True)
+    tutorial_steps = [
+        {
+            "title": "What is Threat Modeling?",
+            "content": "Threat modeling identifies security risks in a system using the STRIDE framework (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege). Start by creating a Data Flow Diagram (DFD).",
+            "action": "Go to 'Create Model' and select the 'Web Application' template."
+        },
+        {
+            "title": "Building a DFD",
+            "content": "A DFD includes Processes (e.g., servers), Data Stores (e.g., databases), External Entities (e.g., users), and Data Flows (e.g., HTTP requests). Drag elements onto the canvas and connect them with Data Flows.",
+            "action": "Add a Process and a Data Flow in the DFD editor."
+        },
+        {
+            "title": "Identifying Threats",
+            "content": "The app uses STRIDE to suggest threats based on your DFD and architecture. For example, a database may face Information Disclosure risks like SQL injection.",
+            "action": "Enter a system description (e.g., 'web app with database') and click 'Generate'."
+        },
+        {
+            "title": "Review and Mitigate",
+            "content": "Review generated threats, their risks, and mitigations. Download reports to document your findings.",
+            "action": "Download a PDF report and review the mitigations."
+        }
+    ]
+    step = st.session_state.tutorial_step
+    if step < len(tutorial_steps):
+        with st.sidebar.expander(tutorial_steps[step]["title"], expanded=True):
+            st.write(tutorial_steps[step]["content"])
+            if st.button("Next Step", key="tutorial_next"):
+                st.session_state.tutorial_step += 1
+                st.rerun()
+    else:
+        st.sidebar.success("Tutorial completed! Explore the app or take the quiz.")
+
+# STRIDE Explanations
+def show_stride_info():
+    st.markdown('<h2 style="color: #0f1a44;">Understanding STRIDE</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
+    for category, threats in stride_library.items():
+        with st.expander(category):
+            st.markdown(f"<p><strong>Description</strong>: {threats[0]['threat']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Vulnerability</strong>: {threats[0]['vulnerability']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Risk</strong>: {threats[0]['risk']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Mitigation</strong>: {threats[0]['mitigation']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Compliance</strong>: {threats[0]['compliance']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Example</strong>: {threats[0]['example']}</p>", unsafe_allow_html=True)
+
+# Quiz Mode
+def show_quiz():
+    st.markdown('<h2 style="color: #0f1a44;">Test Your Knowledge</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
+    questions = [
+        {
+            "question": "What does the 'S' in STRIDE stand for?",
+            "options": ["Security", "Spoofing", "System", "Standard"],
+            "correct": "Spoofing",
+            "explanation": "Spoofing involves impersonating a user or system to gain unauthorized access."
+        },
+        {
+            "question": "Which STRIDE category addresses data exposure?",
+            "options": ["Tampering", "Repudiation", "Information Disclosure", "Denial of Service"],
+            "correct": "Information Disclosure",
+            "explanation": "Information Disclosure involves unauthorized access to sensitive data, like SQL injection."
+        },
+        {
+            "question": "What is a key mitigation for Elevation of Privilege?",
+            "options": ["Encryption", "Rate limiting", "Least privilege", "MFA"],
+            "correct": "Least privilege",
+            "explanation": "Least privilege ensures users have only the permissions needed, reducing escalation risks."
+        }
+    ]
+    with st.container():
+        for i, q in enumerate(questions):
+            st.markdown(f"<h3 style='color: #0f1a44;'>Question {i+1}: {q['question']}</h3>", unsafe_allow_html=True)
+            answer = st.radio(f"Select an answer for question {i+1}", q["options"], key=f"quiz_q{i}", label_visibility="collapsed")
+            st.session_state.quiz_answers[f"q{i}"] = answer
+        if st.button("Submit Quiz"):
+            score = sum(1 for i, q in enumerate(questions) if st.session_state.quiz_answers.get(f"q{i}") == q["correct"])
+            st.markdown(f"<p><strong>Score</strong>: {score}/{len(questions)}</p>", unsafe_allow_html=True)
+            for i, q in enumerate(questions):
+                if st.session_state.quiz_answers.get(f"q{i}") != q["correct"]:
+                    st.markdown(f"<p><strong>Question {i+1}</strong>: Incorrect. {q['explanation']}</p>", unsafe_allow_html=True)
+            st.session_state.quiz_answers = {}
+            logger.info(f"Quiz completed with score: {score}/{len(questions)}")
+
 # Main app
-options = ["Pre-defined Models", "Create Model", "Saved Models", "Logout"]
+options = ["Tutorial", "STRIDE Info", "Pre-defined Models", "Create Model", "Saved Models", "Quiz", "Logout"]
 if st.session_state.role == "admin":
     options.append("Manage Users")
-option = st.sidebar.radio("Options", options)
+option = st.sidebar.radio("Options", options, label_visibility="collapsed")
 
-if option == "Logout":
+if option == "Tutorial":
+    show_tutorial()
+
+elif option == "STRIDE Info":
+    show_stride_info()
+
+elif option == "Logout":
     st.session_state.clear()
-    st.session_state.role = "admin"  # Reset to admin
+    st.session_state.role = "admin"
+    st.session_state.tutorial_step = 0
     logger.info("User logged out")
     st.rerun()
 
 elif option == "Pre-defined Models":
-    st.header("Pre-defined Threat Models")
+    st.markdown('<h2 style="color: #0f1a44;">Pre-defined Threat Models</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
     for model in pre_defined_threat_models:
         with st.expander(model["name"]):
-            st.write(f"**Architecture**: {model['architecture']}")
-            df = pd.DataFrame(model["threats"])
-            st.dataframe(df)
+            st.markdown(f"<p><strong>Architecture</strong>: {model['architecture']}</p>", unsafe_allow_html=True)
+            st.table([
+                {k: v for k, v in threat.items() if k in ["threat", "vulnerability", "risk", "mitigation", "compliance", "example"]}
+                for threat in model["threats"]
+            ])
             st.plotly_chart(create_risk_chart(model["threats"], datetime.now().timestamp()))
-            st.markdown(create_json_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
-            st.markdown(create_csv_report(model["name"], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
-            st.markdown(create_pdf_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col1:
+                st.markdown(create_json_report(model["name"], model["architecture"], [], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+            with col2:
+                st.markdown(create_csv_report(model["name"], model["threats"], datetime.now().timestamp()), unsafe_allow_html=True)
+            with col3:
+                st.markdown(create_pdf_report(model["name"], model["architecture"], [], model["threats"], None, datetime.now().timestamp()), unsafe_allow_html=True)
 
 elif option == "Create Model":
-    st.header("Create Threat Model")
-    st.markdown("Drag Processes, Data Stores, or External Entities to create a DFD.")
+    st.markdown('<h2 style="color: #0f1a44;">Create Threat Model</h2>', unsafe_allow_html=True)
+    st.markdown("Drag Processes, Data Stores, or External Entities to create a DFD. Use templates to start quickly.")
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
 
     # Template selection
-    template = st.selectbox("Template", ["None"] + list(dfd_templates.keys()))
-    if template != "None" and st.button("Load Template"):
-        st.session_state.dfd_elements = dfd_templates[template]
-        st.session_state.last_update = datetime.now().timestamp()
-        logger.info(f"Loaded template: {template}")
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        template = st.selectbox("Template", ["None"] + list(dfd_templates.keys()), label_visibility="collapsed")
+    with col2:
+        if st.button("Load Template", type="secondary"):
+            if template != "None":
+                st.session_state.dfd_elements = dfd_templates[template]
+                st.session_state.last_update = datetime.now().timestamp()
+                logger.info(f"Loaded template: {template}")
 
     # DFD editor
-    with open("dfd_editor.html", "r") as f:
-        html_content = f.read().replace("{{THEME}}", st.session_state.theme)
-    dfd_data = components.html(html_content, height=450)
-    if dfd_data and "elements" in dfd_data:
-        current_time = datetime.now().timestamp()
-        if current_time - st.session_state.last_update > 1:  # Debounce updates (1-second delay)
-            st.session_state.dfd_elements = dfd_data["elements"]
-            st.session_state.last_update = current_time
-            img = PILImage.new("RGB", (800, 400), color="white" if st.session_state.theme == "light" else "#2a2a2a")
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format="PNG")
-            st.session_state.dfd_image = img_byte_arr.getvalue()
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        try:
+            with open("dfd_editor.html", "r") as f:
+                html_content = f.read().replace("{{THEME}}", st.session_state.theme)
+            dfd_data = components.html(html_content, height=450)
+        except FileNotFoundError:
+            st.error("Error: dfd_editor.html not found. Please ensure the file is in the project directory.")
+            logger.error("dfd_editor.html not found")
+            dfd_data = {}
+        except Exception as e:
+            st.error("Error loading DFD editor. Please try again.")
+            logger.error(f"Error loading DFD editor: {str(e)}")
+            dfd_data = {}
+
+        # Process DFD data
+        try:
+            if isinstance(dfd_data, dict) and "elements" in dfd_data:
+                current_time = datetime.now().timestamp()
+                if current_time - st.session_state.last_update > 1:
+                    st.session_state.dfd_elements = dfd_data["elements"]
+                    st.session_state.last_update = current_time
+                    if "image" in dfd_data and dfd_data["image"]:
+                        try:
+                            st.session_state.dfd_image = base64.b64decode(dfd_data["image"].split(",")[1])
+                        except Exception as e:
+                            logger.error(f"Error decoding DFD image: {str(e)}")
+                            st.session_state.dfd_image = None
+            else:
+                logger.warning(f"Invalid dfd_data: {type(dfd_data)} {dfd_data}")
+        except Exception as e:
+            logger.error(f"Error processing dfd_data: {str(e)}")
+            st.error("Error processing DFD data. Please refresh and try again.")
 
     # Annotate elements
-    if st.session_state.dfd_elements and dfd_data and "selected" in dfd_data:
-        selected_id = dfd_data["selected"]
-        selected_element = next((e for e in st.session_state.dfd_elements if e["id"] == selected_id), None)
-        if selected_element:
-            with st.form("dfd_form"):
-                st.markdown(f"Editing: {selected_element['name']} ({selected_element['type']})")
-                element_name = st.text_input("Name", value=selected_element["name"], placeholder="e.g., Web Server")
-                technology = st.text_input("Technology", value=selected_element.get("technology", ""), placeholder="e.g., Node.js")
-                data_flow = st.text_input("Data Flow", value=selected_element.get("data_flow", ""), placeholder="e.g., HTTP request") if selected_element["type"] == "Data Flow" else ""
-                if st.form_submit_button("Update"):
+    with col2:
+        if st.session_state.dfd_elements and isinstance(dfd_data, dict) and "selected" in dfd_data:
+            selected_id = dfd_data["selected"]
+            selected_element = next((e for e in st.session_state.dfd_elements if e["id"] == selected_id), None)
+            if selected_element:
+                st.markdown(f"<p><strong>Editing: {selected_element['name']} ({selected_element['type']})</strong></p>", unsafe_allow_html=True)
+                element_name = st.text_input("Name", value=selected_element["name"], placeholder="e.g., Web Server", label_visibility="collapsed")
+                technology = st.text_input("Technology", value=selected_element.get("technology", ""), placeholder="e.g., Node.js", label_visibility="collapsed")
+                data_flow = st.text_input("Data Flow", value=selected_element.get("data_flow", ""), placeholder="e.g., HTTP request", label_visibility="collapsed") if selected_element["type"] == "Data Flow" else ""
+                if st.button("Update", type="primary"):
                     valid, error = validate_input(element_name, "Name")
                     if valid:
                         for elem in st.session_state.dfd_elements:
@@ -273,17 +572,18 @@ elif option == "Create Model":
 
     # Display DFD elements
     if st.session_state.dfd_elements:
-        st.subheader("DFD Elements")
-        st.dataframe(pd.DataFrame([
+        st.markdown('<h3 style="color: #0f1a44;">DFD Elements</h3>', unsafe_allow_html=True)
+        st.table([
             {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
             for elem in st.session_state.dfd_elements
-        ]))
+        ])
 
     # Generate threat model
-    with st.form("threat_model_form"):
-        threat_model_name = st.text_input("Name", placeholder="e.g., My App")
-        architecture = st.text_area("Architecture", placeholder="Describe your system")
-        if st.form_submit_button("Generate"):
+    with st.container():
+        st.markdown('<h3 style="color: #0f1a44;">Generate Threat Model</h3>', unsafe_allow_html=True)
+        threat_model_name = st.text_input("Name", placeholder="e.g., My App", label_visibility="collapsed")
+        architecture = st.text_area("Architecture", placeholder="Describe your system (e.g., web app with database)", label_visibility="collapsed")
+        if st.button("Generate", type="primary"):
             validations = [
                 validate_input(threat_model_name, "Name"),
                 validate_input(architecture, "Architecture"),
@@ -291,23 +591,29 @@ elif option == "Create Model":
             ]
             if all(v[0] for v in validations):
                 threats = generate_threat_model(st.session_state.dfd_elements, architecture, stride_library)
-                st.subheader(f"Threat Model: {threat_model_name}")
-                st.write(f"**Architecture**: {architecture}")
+                st.markdown(f"<h3 style='color: #0f1a44;'>Threat Model: {threat_model_name}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p><strong>Architecture</strong>: {architecture}</p>", unsafe_allow_html=True)
                 if st.session_state.dfd_image:
                     st.image(st.session_state.dfd_image)
-                st.write("**DFD Elements**:")
-                st.dataframe(pd.DataFrame([
+                st.markdown("<p><strong>DFD Elements</strong>:</p>", unsafe_allow_html=True)
+                st.table([
                     {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
                     for elem in st.session_state.dfd_elements
-                ]))
-                st.write("**Threats**:")
-                df = pd.DataFrame(threats)
-                st.dataframe(df)
+                ])
+                st.markdown("<p><strong>Threats</strong>:</p>", unsafe_allow_html=True)
+                st.table([
+                    {k: v for k, v in threat.items() if k in ["threat", "vulnerability", "risk", "mitigation", "compliance", "example"]}
+                    for threat in threats
+                ])
                 timestamp = datetime.now().timestamp()
                 st.plotly_chart(create_risk_chart(threats, timestamp))
-                st.markdown(create_json_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
-                st.markdown(create_csv_report(threat_model_name, threats, timestamp), unsafe_allow_html=True)
-                st.markdown(create_pdf_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col1:
+                    st.markdown(create_json_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                with col2:
+                    st.markdown(create_csv_report(threat_model_name, threats, timestamp), unsafe_allow_html=True)
+                with col3:
+                    st.markdown(create_pdf_report(threat_model_name, architecture, st.session_state.dfd_elements, threats, st.session_state.dfd_image, timestamp), unsafe_allow_html=True)
 
                 c = conn.cursor()
                 c.execute("INSERT INTO threat_models (name, architecture, dfd_elements, threats, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -319,28 +625,36 @@ elif option == "Create Model":
                     st.error(error)
 
 elif option == "Saved Models":
-    st.header("Saved Threat Models")
+    st.markdown('<h2 style="color: #0f1a44;">Saved Threat Models</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
     c = conn.cursor()
     c.execute("SELECT id, name, architecture, dfd_elements, threats, created_at FROM threat_models")
     models = c.fetchall()
     if models:
         for model_id, name, architecture, dfd_elements, threats, created_at in models:
             with st.expander(f"{name} ({created_at})"):
-                st.write(f"**Architecture**: {architecture}")
+                st.markdown(f"<p><strong>Architecture</strong>: {architecture}</p>", unsafe_allow_html=True)
                 dfd_elements = json.loads(dfd_elements)
                 threats = json.loads(threats)
-                st.dataframe(pd.DataFrame([
+                st.table([
                     {k: v for k, v in elem.items() if k in ["type", "name", "technology", "data_flow"]}
                     for elem in dfd_elements
-                ]))
-                st.dataframe(pd.DataFrame(threats))
+                ])
+                st.table([
+                    {k: v for k, v in threat.items() if k in ["threat", "vulnerability", "risk", "mitigation", "compliance", "example"]}
+                    for threat in threats
+                ])
                 timestamp = datetime.now().timestamp()
                 st.plotly_chart(create_risk_chart(threats, timestamp))
-                st.markdown(create_json_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
-                st.markdown(create_csv_report(name, threats, timestamp), unsafe_allow_html=True)
-                st.markdown(create_pdf_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col1:
+                    st.markdown(create_json_report(name, architecture, dfd_elements, threats, timestamp), unsafe_allow_html=True)
+                with col2:
+                    st.markdown(create_csv_report(name, threats, timestamp), unsafe_allow_html=True)
+                with col3:
+                    st.markdown(create_pdf_report(name, architecture, dfd_elements, threats, None, timestamp), unsafe_allow_html=True)
                 if st.session_state.role == "admin":
-                    if st.button(f"Delete", key=f"delete_{model_id}"):
+                    if st.button(f"Delete", key=f"delete_{model_id}", type="secondary"):
                         c.execute("DELETE FROM threat_models WHERE id = ?", (model_id,))
                         conn.commit()
                         logger.info(f"Deleted model: {name}")
@@ -348,13 +662,17 @@ elif option == "Saved Models":
     else:
         st.info("No saved models.")
 
+elif option == "Quiz":
+    show_quiz()
+
 elif option == "Manage Users" and st.session_state.role == "admin":
-    st.header("Manage Users")
-    with st.form("user_form"):
-        new_username = st.text_input("Username")
-        new_password = st.text_input("Password", type="password")
-        new_role = st.selectbox("Role", ["user", "admin"])
-        if st.form_submit_button("Add User"):
+    st.markdown('<h2 style="color: #0f1a44;">Manage Users</h2>', unsafe_allow_html=True)
+    st.markdown('<div class="aws-divider"></div>', unsafe_allow_html=True)
+    with st.container():
+        new_username = st.text_input("Username", placeholder="Enter username", label_visibility="collapsed")
+        new_password = st.text_input("Password", type="password", placeholder="Enter password", label_visibility="collapsed")
+        new_role = st.selectbox("Role", ["user", "admin"], label_visibility="collapsed")
+        if st.button("Add User", type="primary"):
             valid, error = validate_input(new_username, "Username", 50)
             if valid:
                 c = conn.cursor()
@@ -366,18 +684,19 @@ elif option == "Manage Users" and st.session_state.role == "admin":
             else:
                 st.error(error)
 
-    c = conn.cursor()
-    c.execute("SELECT username, role FROM users")
-    users = c.fetchall()
-    for username, role in users:
-        st.write(f"Username: {username}, Role: {role}")
-        if st.button(f"Delete {username}", key=f"delete_user_{username}"):
-            c.execute("DELETE FROM users WHERE username = ?", (username,))
-            conn.commit()
-            logger.info(f"Deleted user: {username}")
-            st.rerun()
+        c = conn.cursor()
+        c.execute("SELECT username, role FROM users")
+        users = c.fetchall()
+        for username, role in users:
+            st.markdown(f"<p>Username: {username}, Role: {role}</p>", unsafe_allow_html=True)
+            if st.button(f"Delete {username}", key=f"delete_user_{username}", type="secondary"):
+                c.execute("DELETE FROM users WHERE username = ?", (username,))
+                conn.commit()
+                logger.info(f"Deleted user: {username}")
+                st.rerun()
 
 # Clean up temporary files
 for file in os.listdir():
     if file.startswith("temp_") and file.endswith(".pdf"):
         os.remove(file)
+```
