@@ -1,5 +1,6 @@
 streamlit
-pandas
 reportlab
 pillow
 plotly
+pyyaml
+pandas
