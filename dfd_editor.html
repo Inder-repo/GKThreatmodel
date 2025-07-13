@@ -1,36 +1,132 @@
-
-#### 2. Drag-and-Drop Editor (`dfd_editor.html`)
-This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce updates sent to Streamlit, improving performance.
-
-<xaiArtifact artifact_id="442a948b-504d-460e-9ca5-5a64ec0c6f15" artifact_version_id="9dab2792-2be7-4423-8f9f-3733e1b08eab" title="dfd_editor.html" contentType="text/html">
 ```html
 <!DOCTYPE html>
 <html>
 <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
-        body { margin: 0; font-family: Arial; }
-        .toolbar { background: #f0f0f0; padding: 5px; border-bottom: 1px solid #ccc; }
-        .toolbar button { margin: 3px; padding: 5px; cursor: move; }
-        .canvas { width: 600px; height: 300px; border: 1px solid #000; position: relative; background: #fff; }
-        .canvas.dark { background: #2a2a2a; }
-        .element { position: absolute; border: 1px solid #000; text-align: center; line-height: 20px; cursor: move; font-size: 12px; }
-        .process { width: 40px; height: 40px; border-radius: 50%; background: #aaffaa; }
-        .data-store { width: 80px; height: 30px; background: #aaaaff; }
-        .external-entity { width: 80px; height: 30px; background: #ffaaaa; }
-        .selected { border: 2px solid red; }
+        body { margin: 0; font-family: 'Noto Sans', sans-serif; }
+        .aws-container { background: #ffffff; border: 1px solid #d5dbdb; border-radius: 4px; padding: 16px; margin: 8px; }
+        .aws-toolbar { display: flex; gap: 8px; padding: 8px; background: #e9ecef; border-bottom: 1px solid #d5dbdb; }
+        .aws-toolbar button {
+            background-color: #0073bb;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .aws-toolbar button:hover { background-color: #005ea2; }
+        .aws-toolbar button.secondary {
+            background-color: #ffffff;
+            color: #0f1a44;
+            border: 1px solid #0073bb;
+        }
+        .aws-toolbar button.secondary:hover { background-color: #e9ecef; }
+        .aws-canvas {
+            width: 600px;
+            height: 300px;
+            border: 1px solid #d5dbdb;
+            position: relative;
+            background: #ffffff;
+            border-radius: 4px;
+            transition: box-shadow 0.2s;
+        }
+        .aws-canvas.drop-active { box-shadow: 0 0 0 2px #ff6200; }
+        .aws-canvas.dark { background: #1a2a6c; }
+        .aws-element {
+            position: absolute;
+            border: 1px solid #0f1a44;
+            text-align: center;
+            line-height: 20px;
+            cursor: move;
+            font-size: 12px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .aws-process {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #aaffaa;
+        }
+        .aws-data-store {
+            width: 80px;
+            height: 30px;
+            background: #aaaaff;
+        }
+        .aws-external-entity {
+            width: 80px;
+            height: 30px;
+            background: #ffaaaa;
+        }
+        .aws-selected { border: 2px solid #ff6200; }
         svg { position: absolute; width: 100%; height: 100%; }
+        .aws-tooltip {
+            position: absolute;
+            background: #0f1a44;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 100;
+        }
+        .aws-icon { margin-right: 4px; }
     </style>
 </head>
 <body>
-    <div class="toolbar">
-        <button draggable="true" data-type="Process">Process</button>
-        <button draggable="true" data-type="Data Store">Data Store</button>
-        <button draggable="true" data-type="External Entity">Entity</button>
-        <button onclick="startDrawingArrow()">Data Flow</button>
-        <button onclick="clearCanvas()">Clear</button>
+    <div class="aws-container">
+        <h2 style="color: #0f1a44; margin: 0 0 8px 0;">DFD Editor</h2>
+        <div class="aws-toolbar">
+            <button draggable="true" data-type="Process" aria-label="Add Process (e.g., server)">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <circle cx="8" cy="8" r="7" />
+                </svg>
+                Process
+            </button>
+            <button draggable="true" data-type="Data Store" aria-label="Add Data Store (e.g., database)">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <rect x="2" y="2" width="12" height="12" rx="2" />
+                </svg>
+                Data Store
+            </button>
+            <button draggable="true" data-type="External Entity" aria-label="Add External Entity (e.g., user)">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <path d="M8 2a3 3 0 0 0-3 3v2h2v7h2v-7h2V5a3 3 0 0 0-3-3z" />
+                </svg>
+                Entity
+            </button>
+            <button class="secondary" onclick="startDrawingArrow()" aria-label="Connect elements with a data flow">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <path d="M2 8h10m0 0l4-4m-4 4l4 4" />
+                </svg>
+                Data Flow
+            </button>
+            <button class="secondary" onclick="undo()" aria-label="Undo last action">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <path d="M2 8a6 6 0 0 1 6-6h2m0 0l-3-3m3 3l-3 3" />
+                </svg>
+                Undo
+            </button>
+            <button class="secondary" onclick="redo()" aria-label="Redo last action">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <path d="M14 8a6 6 0 0 0-6-6h-2m0 0l3-3m-3 3l3 3" />
+                </svg>
+                Redo
+            </button>
+            <button class="secondary" onclick="clearCanvas()" aria-label="Clear the canvas">
+                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
+                    <path d="M2 2l12 12m0-12L2 14" />
+                </svg>
+                Clear
+            </button>
+        </div>
+        <div id="canvas" class="aws-canvas" role="region" aria-label="Data Flow Diagram Editor"></div>
+        <svg id="arrows"></svg>
     </div>
-    <div id="canvas" class="canvas"></div>
-    <svg id="arrows"></svg>
     <script>
         let elements = [];
         let arrows = [];
@@ -38,6 +134,8 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
         let drawingArrow = false;
         let arrowStart = null;
         let lastUpdate = 0;
+        let history = [];
+        let redoStack = [];
         const canvas = document.getElementById('canvas');
         const arrowsSvg = document.getElementById('arrows');
 
@@ -45,13 +143,14 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
         canvas.classList.toggle('dark', '{{THEME}}' === 'dark');
 
         // Drag and drop
-        document.querySelectorAll('.toolbar button').forEach(button => {
-            button.addEventListener('dragstart', e => e.dataTransfer.setData('type', e.target.dataset.type));
+        canvas.addEventListener('dragover', e => {
+            e.preventDefault();
+            canvas.classList.add('drop-active');
         });
-
-        canvas.addEventListener('dragover', e => e.preventDefault());
+        canvas.addEventListener('dragleave', () => canvas.classList.remove('drop-active'));
         canvas.addEventListener('drop', e => {
             e.preventDefault();
+            canvas.classList.remove('drop-active');
             const type = e.dataTransfer.getData('type');
             if (type && type !== 'Data Flow') {
                 const id = 'elem_' + Date.now();
@@ -61,6 +160,8 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
                 const height = type === 'Process' ? 40 : 30;
                 const element = { id, type, name: type + '_' + elements.length, x, y, width, height, technology: '', data_flow: '' };
                 elements.push(element);
+                history.push({ action: 'add', element });
+                redoStack = [];
                 addElementToCanvas(element);
                 sendDataToStreamlit();
             }
@@ -69,15 +170,20 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
         function addElementToCanvas(element) {
             const div = document.createElement('div');
             div.id = element.id;
-            div.className = `element ${element.type.toLowerCase().replace(' ', '-')}`;
+            div.className = `aws-element aws-${element.type.toLowerCase().replace(' ', '-')}`;
             div.style.left = element.x + 'px';
             div.style.top = element.y + 'px';
             div.style.width = element.width + 'px';
             div.style.height = element.height + 'px';
             div.innerText = element.name;
             div.draggable = true;
+            div.setAttribute('role', 'button');
+            div.setAttribute('aria-label', `${element.type}: ${element.name}`);
             div.addEventListener('dragstart', e => e.dataTransfer.setData('id', element.id));
             div.addEventListener('click', () => selectElement(element.id));
+            div.addEventListener('keydown', e => {
+                if (e.key === 'Enter' || e.key === ' ') selectElement(element.id);
+            });
             canvas.appendChild(div);
         }
 
@@ -87,19 +193,26 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
             const id = e.dataTransfer.getData('id');
             const element = elements.find(el => el.id === id);
             if (element) {
+                const oldX = element.x, oldY = element.y;
                 element.x = e.offsetX - element.width / 2;
                 element.y = e.offsetY - element.height / 2;
                 document.getElementById(id).style.left = element.x + 'px';
                 document.getElementById(id).style.top = element.y + 'px';
+                history.push({ action: 'move', id, oldX, oldY, newX: element.x, newY: element.y });
+                redoStack = [];
                 updateArrows();
                 sendDataToStreamlit();
             }
         });
 
         function selectElement(id) {
-            if (selectedElement) document.getElementById(selectedElement).classList.remove('selected');
+            if (selectedElement) {
+                const prev = document.getElementById(selectedElement);
+                if (prev) prev.classList.remove('aws-selected');
+            }
             selectedElement = id;
-            document.getElementById(id).classList.add('selected');
+            const elem = document.getElementById(id);
+            if (elem) elem.classList.add('aws-selected');
             sendDataToStreamlit();
         }
 
@@ -130,6 +243,8 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
                         data_flow: 'Data Flow'
                     };
                     arrows.push(arrow);
+                    history.push({ action: 'add_arrow', arrow });
+                    redoStack = [];
                     drawArrow(arrow);
                     arrowStart = null;
                     drawingArrow = false;
@@ -149,7 +264,7 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
                 line.setAttribute('y1', source.y + source.height / 2);
                 line.setAttribute('x2', target.x + target.width / 2);
                 line.setAttribute('y2', target.y + target.height / 2);
-                line.setAttribute('stroke', 'black');
+                line.setAttribute('stroke', '#0f1a44');
                 line.setAttribute('stroke-width', '1');
                 line.setAttribute('marker-end', 'url(#arrowhead)');
                 arrowsSvg.appendChild(line);
@@ -157,35 +272,139 @@ This HTML/JavaScript file is optimized to reduce DOM manipulation and debounce u
         }
 
         function updateArrows() {
-            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
+            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" fill="#0f1a44" /></marker></defs>';
             arrows.forEach(drawArrow);
         }
 
         function clearCanvas() {
+            history.push({ action: 'clear', elements: [...elements], arrows: [...arrows] });
+            redoStack = [];
             elements = [];
             arrows = [];
             canvas.innerHTML = '';
-            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
+            arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" fill="#0f1a44" /></marker></defs>';
             sendDataToStreamlit();
         }
 
-        function sendDataToStreamlit() {
-            if (Date.now() - lastUpdate < 1000) return; // Debounce updates (1-second delay)
-            lastUpdate = Date.now();
-            window.Streamlit.setComponentValue({ elements: elements.concat(arrows), selected: selectedElement });
+        function undo() {
+            if (history.length === 0) return;
+            const lastAction = history.pop();
+            redoStack.push(lastAction);
+            if (lastAction.action === 'add') {
+                elements = elements.filter(el => el.id !== lastAction.element.id);
+                const elem = document.getElementById(lastAction.element.id);
+                if (elem) canvas.removeChild(elem);
+            } else if (lastAction.action === 'move') {
+                const element = elements.find(el => el.id === lastAction.id);
+                if (element) {
+                    element.x = lastAction.oldX;
+                    element.y = lastAction.oldY;
+                    const elem = document.getElementById(element.id);
+                    if (elem) {
+                        elem.style.left = element.x + 'px';
+                        elem.style.top = element.y + 'px';
+                    }
+                    updateArrows();
+                }
+            } else if (lastAction.action === 'add_arrow') {
+                arrows = arrows.filter(a => a.id !== lastAction.arrow.id);
+                const line = document.getElementById(lastAction.arrow.id);
+                if (line) arrowsSvg.removeChild(line);
+            } else if (lastAction.action === 'clear') {
+                elements = [...lastAction.elements];
+                arrows = [...lastAction.arrows];
+                canvas.innerHTML = '';
+                elements.forEach(addElementToCanvas);
+                updateArrows();
+            }
+            sendDataToStreamlit();
         }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const action = redoStack.pop();
+            history.push(action);
+            if (action.action === 'add') {
+                elements.push(action.element);
+                addElementToCanvas(action.element);
+            } else if (action.action === 'move') {
+                const element = elements.find(el => el.id === action.id);
+                if (element) {
+                    element.x = action.newX;
+                    element.y = action.newY;
+                    const elem = document.getElementById(element.id);
+                    if (elem) {
+                        elem.style.left = element.x + 'px';
+                        elem.style.top = element.y + 'px';
+                    }
+                    updateArrows();
+                }
+            } else if (action.action === 'add_arrow') {
+                arrows.push(action.arrow);
+                drawArrow(action.arrow);
+            } else if (action.action === 'clear') {
+                elements = [];
+                arrows = [];
+                canvas.innerHTML = '';
+                arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" fill="#0f1a44" /></marker></defs>';
+            }
+            sendDataToStreamlit();
+        }
+
+        function showTooltip(e, text) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'aws-tooltip';
+            tooltip.innerText = text;
+            tooltip.style.left = e.pageX + 10 + 'px';
+            tooltip.style.top = e.pageY + 10 + 'px';
+            document.body.appendChild(tooltip);
+        }
+
+        function hideTooltip() {
+            const tooltip = document.querySelector('.aws-tooltip');
+            if (tooltip) document.body.removeChild(tooltip);
+        }
+
+        function sendDataToStreamlit() {
+            if (Date.now() - lastUpdate < 1000) return;
+            lastUpdate = Date.now();
+            if (!window.Streamlit) {
+                console.warn('Streamlit not available');
+                return;
+            }
+            html2canvas(document.getElementById('canvas')).then(canvas => {
+                const image = canvas.toDataURL('image/png');
+                window.Streamlit.setComponentValue({ 
+                    elements: elements.concat(arrows), 
+                    selected: selectedElement, 
+                    image: image 
+                });
+            }).catch(err => {
+                console.error('Error capturing canvas:', err);
+            });
+        }
+
+        // Initialize toolbar buttons
+        document.querySelectorAll('.aws-toolbar button').forEach(button => {
+            button.addEventListener('dragstart', e => e.dataTransfer.setData('type', e.target.dataset.type));
+            button.addEventListener('mouseover', e => showTooltip(e, e.target.getAttribute('aria-label')));
+            button.addEventListener('mouseout', hideTooltip);
+        });
 
         window.addEventListener('message', e => {
             if (e.data.type === 'LOAD_ELEMENTS') {
-                elements = e.data.elements.filter(el => el.type !== 'Data Flow');
-                arrows = e.data.elements.filter(el => el.type === 'Data Flow');
+                elements = e.data.elements.filter(el => el.type !== 'Data Flow') || [];
+                arrows = e.data.elements.filter(el => el.type === 'Data Flow') || [];
                 canvas.innerHTML = '';
-                arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" /></marker></defs>';
+                arrowsSvg.innerHTML = '<defs><marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto"><polygon points="0 0, 8 2.5, 0 5" fill="#0f1a44" /></marker></defs>';
                 elements.forEach(addElementToCanvas);
                 arrows.forEach(drawArrow);
                 sendDataToStreamlit();
             }
         });
+
+        // Initial data send
+        sendDataToStreamlit();
     </script>
 </body>
 </html>
