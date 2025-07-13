@@ -698,4 +698,3 @@ elif option == "Manage Users" and st.session_state.role == "admin":
 for file in os.listdir():
     if file.startswith("temp_") and file.endswith(".pdf"):
         os.remove(file)
-```
