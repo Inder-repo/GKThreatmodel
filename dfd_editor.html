@@ -1,419 +1,756 @@
-html
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <style>
-        body { margin: 0; font-family: 'Noto Sans', sans-serif; }
-        .aws-container { background: #ffffff; border: 1px solid #d5dbdb; border-radius: 4px; padding: 16px; margin: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-        .aws-toolbar { display: flex; gap: 8px; padding: 8px; background: #e9ecef; border-bottom: 1px solid #d5dbdb; border-radius: 4px 4px 0 0; }
-        .aws-toolbar button {
-            background: linear-gradient(to bottom, #0073bb, #005ea2);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 8px 16px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.2s ease-in-out, transform 0.1s;
-            display: flex;
-            align-items: center;
-        }
-        .aws-toolbar button:hover { background: #005ea2; transform: translateY(-1px); }
-        .aws-toolbar button.secondary {
-            background: #ffffff;
-            color: #0f1a44;
-            border: 1px solid #0073bb;
-        }
-        .aws-toolbar button.secondary:hover { background: #e9ecef; transform: translateY(-1px); }
-        .aws-canvas {
-            width: 600px;
-            height: 300px;
-            border: 1px solid #d5dbdb;
-            position: relative;
-            background: #ffffff;
-            border-radius: 4px;
-            transition: box-shadow 0.2s;
-        }
-        .aws-canvas.drop-active {
-            box-shadow: 0 0 0 2px #ff6200;
-            animation: pulse 1s infinite;
-        }
-        .aws-canvas.dark { background: #1a2a6c; }
-        .aws-element {
-            position: absolute;
-            border: 1px solid #0f1a44;
-            text-align: center;
-            line-height: 20px;
-            cursor: move;
-            font-size: 12px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.1s;
-        }
-        .aws-element:hover { transform: scale(1.05); }
-        .aws-process { width: 40px; height: 40px; border-radius: 50%; background: #aaffaa; }
-        .aws-data-store { width: 80px; height: 30px; background: #aaaaff; }
-        .aws-external-entity { width: 80px; height: 30px; background: #ffaaaa; }
-        .aws-selected { border: 2px solid #ff6200; }
-        svg { position: absolute; width: 100%; height: 100%; }
-        .aws-tooltip {
-            position: absolute;
-            background: #0f1a44;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 100;
-            opacity: 0;
-            transition: opacity 0.2s;
-        }
-        .aws-tooltip.show { opacity: 1; }
-        .aws-icon { margin-right: 4px; }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 2px rgba(255, 98, 0, 0.4); }
-            50% { box-shadow: 0 0 0 4px rgba(255, 98, 0, 0.6); }
-            100% { box-shadow: 0 0 0 2px rgba(255, 98, 0, 0.4); }
-        }
-    </style>
-</head>
-<body>
-    <div class="aws-container">
-        <h2 style="color: #0f1a44; margin: 0 0 8px 0;">DFD Editor</h2>
-        <div class="aws-toolbar">
-            <button draggable="true" data-type="Process" aria-label="Add Process (e.g., server)">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M8 2a6 6 0 0 0-6 6 6 6 0 0 0 6 6 6 6 0 0 0 6-6 6 6 0 0 0-6-6zm-1 2h2v8H7V4z"/>
-                </svg>
-                Process
-            </button>
-            <button draggable="true" data-type="Data Store" aria-label="Add Data Store (e.g., database)">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M2 4h12v8H2V4zm2 2v4h8V6H4z"/>
-                </svg>
-                Data Store
-            </button>
-            <button draggable="true" data-type="External Entity" aria-label="Add External Entity (e.g., user)">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M8 2a3 3 0 0 0-3 3v2h2v7h2v-7h2V5a3 3 0 0 0-3-3z"/>
-                </svg>
-                Entity
-            </button>
-            <button class="secondary" onclick="startDrawingArrow()" aria-label="Connect elements with a data flow">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M2 8h10m0 0l4-4m-4 4l4 4"/>
-                </svg>
-                Data Flow
-            </button>
-            <button class="secondary" onclick="undo()" aria-label="Undo last action">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M2 8a6 6 0 0 1 6-6h2m0 0l-3-3m3 3l-3 3"/>
-                </svg>
-                Undo
-            </button>
-            <button class="secondary" onclick="redo()" aria-label="Redo last action">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M14 8a6 6 0 0 0-6-6h-2m0 0l3-3m-3 3l3 3"/>
-                </svg>
-                Redo
-            </button>
-            <button class="secondary" onclick="clearCanvas()" aria-label="Clear the canvas">
-                <svg class="aws-icon" width="16" height="16" viewBox="0 0 16 16" fill="#0f1a44">
-                    <path d="M2 2l12 12m0-12L2 14"/>
-                </svg>
-                Clear
-            </button>
+    
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ margin: 0; overflow: hidden; }}
+            #diagram-container {{
+                border: 1px solid #ddd;
+                border-radius: 10px;
+                background-color: #f9f9f9;
+                overflow: hidden;
+                position: relative;
+                height: 600px;
+                width: 100%;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            }}
+            #diagram-svg {{
+                width: 100%;
+                height: 100%;
+            }}
+            .diagram-node-rect {{
+                cursor: grab;
+                stroke: #333;
+                stroke-width: 2px;
+                transition: all 0.2s ease-in-out;
+                filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.1));
+            }}
+            .diagram-node-rect:hover {{
+                transform: translateY(-3px);
+                stroke: #2a5298;
+                filter: drop-shadow(3px 3px 6px rgba(0,0,0,0.2));
+            }}
+            .diagram-node-rect.selected {{
+                stroke: #667eea;
+                stroke-width: 4px;
+                filter: drop-shadow(4px 4px 8px rgba(0,0,0,0.3));
+            }}
+            .diagram-node-text {{
+                font-family: 'Inter', sans-serif;
+                font-size: 12px;
+                fill: #333;
+                pointer-events: none;
+                text-anchor: middle;
+                dominant-baseline: central;
+                font-weight: 600;
+            }}
+            .diagram-edge {{
+                stroke: #764ba2;
+                stroke-width: 2px;
+                fill: none;
+                marker-end: url(#arrowhead);
+                stroke-opacity: 0.8;
+            }}
+            .diagram-edge.boundary-cross {{
+                stroke: #ff6b6b;
+                stroke-dasharray: 5,5;
+            }}
+            .diagram-edge-label {{
+                font-family: 'Inter', sans-serif;
+                font-size: 10px;
+                fill: #555;
+                background-color: rgba(255,255,255,0.9);
+                padding: 3px 8px;
+                border-radius: 5px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                font-weight: 500;
+            }}
+            .diagram-controls {{
+                position: absolute;
+                top: 15px;
+                left: 15px;
+                z-index: 10;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }}
+            .diagram-controls button {{
+                background-color: #007bff;
+                color: white;
+                border: none;
+                padding: 10px 18px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                transition: background-color 0.2s ease, transform 0.1s ease;
+                box-shadow: 0 3px 8px rgba(0,123,255,0.3);
+            }}
+            .diagram-controls button:hover {{
+                background-color: #0056b3;
+                transform: translateY(-1px);
+            }}
+            .diagram-controls button:disabled {{
+                background-color: #cccccc;
+                cursor: not-allowed;
+                box-shadow: none;
+            }}
+            .modal {{
+                display: none;
+                position: fixed;
+                z-index: 100;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                overflow: auto;
+                background-color: rgba(0,0,0,0.6);
+                justify-content: center;
+                align-items: center;
+            }}
+            .modal-content {{
+                background-color: #fefefe;
+                margin: auto;
+                padding: 30px;
+                border-radius: 15px;
+                width: 90%;
+                max-width: 600px;
+                box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }}
+            .modal-content h2 {{
+                color: #2a5298;
+                margin-top: 0;
+                font-size: 1.8em;
+            }}
+            .modal-content label {{
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 5px;
+            }}
+            .modal-content input, .modal-content select, .modal-content textarea {{
+                width: calc(100% - 20px);
+                padding: 12px;
+                margin-top: 5px;
+                border: 1px solid #c0c0c0;
+                border-radius: 8px;
+                font-size: 1em;
+            }}
+            .modal-content textarea {{
+                min-height: 80px;
+                resize: vertical;
+            }}
+            .modal-content button {{
+                background-color: #28a745;
+                color: white;
+                padding: 12px 25px;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 1.05em;
+                font-weight: 600;
+                transition: background-color 0.2s ease;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            }}
+            .modal-content button.cancel {{
+                background-color: #dc3545;
+            }}
+            .modal-content button.cancel:hover {{
+                background-color: #c82333;
+            }}
+            .modal-content button:hover {{
+                background-color: #218838;
+            }}
+            .trust-boundary-rect {{
+                fill: #e0f7fa;
+                fill-opacity: 0.4;
+                stroke: #007bff;
+                stroke-width: 2px;
+                stroke-dasharray: 8 4;
+                rx: 10;
+                ry: 10;
+                cursor: move;
+            }}
+            .trust-boundary-rect.selected {{
+                stroke: #ff6b6b;
+                stroke-width: 3px;
+            }}
+            .trust-boundary-label {{
+                font-family: 'Inter', sans-serif;
+                font-size: 14px;
+                fill: #0056b3;
+                font-weight: 700;
+                pointer-events: none;
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="diagram-container">
+            <div class="diagram-controls">
+                <button id="addNodeBtn">Add Component</button>
+                <button id="addConnectionBtn">Add Connection</button>
+                <button id="addBoundaryBtn">Add Trust Boundary</button>
+                <button id="deleteSelectedBtn" disabled>Delete Selected</button>
+            </div>
+            <svg id="diagram-svg" viewBox="0 0 1200 600">
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                            refX="10" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#764ba2" />
+                    </marker>
+                    <marker id="arrowhead-boundary" markerWidth="10" markerHeight="7" 
+                            refX="10" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#ff6b6b" />
+                    </marker>
+                </defs>
+            </svg>
         </div>
-        <div id="canvas" class="aws-canvas" role="region" aria-label="Data Flow Diagram Editor"></div>
-        <svg id="arrows">
-            <defs>
-                <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="8" refY="2.5" orient="auto">
-                    <polygon points="0 0, 8 2.5, 0 5" fill="#0f1a44"/>
-                </marker>
-            </defs>
-        </svg>
-    </div>
-    <script>
-        let elements = [];
-        let arrows = [];
-        let selectedElement = null;
-        let drawingArrow = false;
-        let arrowStart = null;
-        let lastUpdate = 0;
-        let history = [];
-        let redoStack = [];
-        const canvas = document.getElementById('canvas');
-        const arrowsSvg = document.getElementById('arrows');
 
-        // Apply theme
-        canvas.classList.toggle('dark', '{{THEME}}' === 'dark');
+        <!-- Add Component Modal -->
+        <div id="addComponentModal" class="modal">
+            <div class="modal-content">
+                <h2>Add New Component</h2>
+                <label for="nodeName">Name:</label>
+                <input type="text" id="nodeName">
+                <label for="nodeType">Type:</label>
+                <select id="nodeType">
+                    <option value="User">User</option>
+                    <option value="Process">Process</option>
+                    <option value="Data">Data</option>
+                </select>
+                <label for="nodeDescription">Description:</label>
+                <textarea id="nodeDescription"></textarea>
+                <label for="nodeBoundary">Associated Trust Boundary:</label>
+                <select id="nodeBoundary">
+                    <option value="">None</option>
+                    {''.join(f'<option value="{b}">{b}</option>' for b in all_boundaries_for_js)}
+                </select>
+                <div style="display: flex; justify-content: space-between;">
+                    <button type="button" class="cancel" onclick="closeModal('addComponentModal')">Cancel</button>
+                    <button type="button" onclick="saveComponent()">Add Component</button>
+                </div>
+            </div>
+        </div>
 
-        // Drag and drop
-        canvas.addEventListener('dragover', e => {
-            e.preventDefault();
-            canvas.classList.add('drop-active');
-        });
-        canvas.addEventListener('dragleave', () => canvas.classList.remove('drop-active'));
-        canvas.addEventListener('drop', e => {
-            e.preventDefault();
-            canvas.classList.remove('drop-active');
-            const type = e.dataTransfer.getData('type');
-            if (type && type !== 'Data Flow') {
-                const id = 'elem_' + Date.now();
-                const x = e.offsetX - (type === 'Process' ? 20 : 40);
-                const y = e.offsetY - (type === 'Process' ? 20 : 15);
-                const width = type === 'Process' ? 40 : 80;
-                const height = type === 'Process' ? 40 : 30;
-                const element = { id, type, name: type + '_' + elements.length, x, y, width, height, technology: '', data_flow: '' };
-                elements.push(element);
-                history.push({ action: 'add', element });
-                redoStack = [];
-                addElementToCanvas(element);
-                sendDataToStreamlit();
-            }
-        });
+        <!-- Add Connection Modal -->
+        <div id="addConnectionModal" class="modal">
+            <div class="modal-content">
+                <h2>Add New Connection</h2>
+                <label for="connSource">Source Component:</label>
+                <select id="connSource"></select>
+                <label for="connTarget">Target Component:</label>
+                <select id="connTarget"></select>
+                <label for="connDataFlow">Data Flow Type (e.g., HTTP/S):</label>
+                <input type="text" id="connDataFlow">
+                <label for="connDescription">Description:</label>
+                <textarea id="connDescription"></textarea>
+                <label for="connTrustBoundary">Trust Boundary Crossed:</label>
+                <select id="connTrustBoundary"></select>
+                <input type="text" id="newTrustBoundaryText" placeholder="Enter new boundary name" style="display: none;">
+                <div style="display: flex; justify-content: space-between;">
+                    <button type="button" class="cancel" onclick="closeModal('addConnectionModal')">Cancel</button>
+                    <button type="button" onclick="saveConnection()">Add Connection</button>
+                </div>
+            </div>
+        </div>
 
-        function addElementToCanvas(element) {
-            const div = document.createElement('div');
-            div.id = element.id;
-            div.className = `aws-element aws-${element.type.toLowerCase().replace(' ', '-')}`;
-            div.style.left = element.x + 'px';
-            div.style.top = element.y + 'px';
-            div.style.width = element.width + 'px';
-            div.style.height = element.height + 'px';
-            div.innerText = element.name;
-            div.draggable = true;
-            div.setAttribute('role', 'button');
-            div.setAttribute('aria-label', `${element.type}: ${element.name}`);
-            div.addEventListener('dragstart', e => e.dataTransfer.setData('id', element.id));
-            div.addEventListener('click', () => selectElement(element.id));
-            div.addEventListener('keydown', e => {
-                if (e.key === 'Enter' || e.key === ' ') selectElement(element.id);
-            });
-            canvas.appendChild(div);
-        }
+        <!-- Add Trust Boundary Modal -->
+        <div id="addBoundaryModal" class="modal">
+            <div class="modal-content">
+                <h2>Add New Trust Boundary</h2>
+                <label for="boundaryName">Boundary Name:</label>
+                <input type="text" id="boundaryName">
+                <label for="boundaryDescription">Description:</label>
+                <textarea id="boundaryDescription"></textarea>
+                <label for="boundaryX">X Coordinate:</label>
+                <input type="number" id="boundaryX" min="0" max="1150" value="50">
+                <label for="boundaryY">Y Coordinate:</label>
+                <input type="number" id="boundaryY" min="0" max="550" value="50">
+                <label for="boundaryWidth">Width:</label>
+                <input type="number" id="boundaryWidth" min="100" max="1100" value="300">
+                <label for="boundaryHeight">Height:</label>
+                <input type="number" id="boundaryHeight" min="100" max="500" value="200">
+                <div style="display: flex; justify-content: space-between;">
+                    <button type="button" class="cancel" onclick="closeModal('addBoundaryModal')">Cancel</button>
+                    <button type="button" onclick="saveBoundary()">Add Boundary</button>
+                </div>
+            </div>
+        </div>
 
-        canvas.addEventListener('dragover', e => e.preventDefault());
-        canvas.addEventListener('drop', e => {
-            e.preventDefault();
-            const id = e.dataTransfer.getData('id');
-            const element = elements.find(el => el.id === id);
-            if (element) {
-                const oldX = element.x, oldY = element.y;
-                element.x = e.offsetX - element.width / 2;
-                element.y = e.offsetY - element.height / 2;
-                document.getElementById(id).style.left = element.x + 'px';
-                document.getElementById(id).style.top = element.y + 'px';
-                history.push({ action: 'move', id, oldX, oldY, newX: element.x, newY: element.y });
-                redoStack = [];
-                updateArrows();
-                sendDataToStreamlit();
-            }
-        });
+        <script>
+            const streamlitReport = window.parent.document.querySelector('.stApp [data-testid="stVerticalBlock"]');
+            const svg = document.getElementById('diagram-svg');
+            let nodes = {json.dumps(st.session_state.architecture['components'])};
+            let connections = {json.dumps(st.session_state.architecture['connections'])};
+            let boundaries = {json.dumps(st.session_state.architecture.get('boundaries', []))};
+            let threatBoundaryNamesForDropdown = {json.dumps(all_boundaries_for_js)};
+            let selectedNode = null;
+            let selectedBoundary = null;
+            let isDragging = false;
+            let activeElement = null;
+            let activeNodeId = null;
+            let activeBoundaryId = null;
+            let offset = {{x: 0, y: 0}};
+            const nodeWidth = 100;
+            const nodeHeight = 60;
+            const boundaryMinWidth = 100;
+            const boundaryMinHeight = 100;
 
-        function selectElement(id) {
-            if (selectedElement) {
-                const prev = document.getElementById(selectedElement);
-                if (prev) prev.classList.remove('aws-selected');
-            }
-            selectedElement = id;
-            const elem = document.getElementById(id);
-            if (elem) elem.classList.add('aws-selected');
-            sendDataToStreamlit();
-        }
+            function sendDataToStreamlit() {{
+                const data = {{
+                    components: nodes,
+                    connections: connections,
+                    boundaries: boundaries
+                }};
+                const outputElement = window.parent.document.getElementById('streamlit_output_data');
+                if (outputElement) {{
+                    outputElement.value = JSON.stringify(data);
+                    outputElement.dispatchEvent(new Event('input'));
+                }} else {{
+                    console.error("Streamlit output element not found.");
+                }}
+            }}
 
-        function startDrawingArrow() {
-            drawingArrow = true;
-            canvas.addEventListener('click', handleArrowClick);
-        }
+            function isPointInBoundary(x, y, boundary) {{
+                return x >= boundary.x && x <= boundary.x + boundary.width &&
+                       y >= boundary.y && y <= boundary.y + boundary.height;
+            }}
 
-        function handleArrowClick(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const element = elements.find(el => 
-                x >= el.x && x <= el.x + el.width && 
-                y >= el.y && y <= el.y + el.height && 
-                el.type !== 'Data Flow'
-            );
-            if (element) {
-                if (!arrowStart) {
-                    arrowStart = element;
-                } else if (element !== arrowStart) {
-                    const arrow = {
-                        id: 'arrow_' + Date.now(),
-                        source: arrowStart.name,
-                        target: element.name,
-                        type: 'Data Flow',
-                        name: 'Flow_' + arrows.length,
-                        data_flow: 'Data Flow'
-                    };
-                    arrows.push(arrow);
-                    history.push({ action: 'add_arrow', arrow });
-                    redoStack = [];
-                    drawArrow(arrow);
-                    arrowStart = null;
-                    drawingArrow = false;
-                    canvas.removeEventListener('click', handleArrowClick);
+            function drawDiagram() {{
+                svg.innerHTML = `
+                    <defs>
+                        <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                                refX="10" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#764ba2" />
+                        </marker>
+                        <marker id="arrowhead-boundary" markerWidth="10" markerHeight="7" 
+                                refX="10" refY="3.5" orient="auto">
+                            <polygon points="0 0, 10 3.5, 0 7" fill="#ff6b6b" />
+                        </marker>
+                    </defs>
+                `;
+
+                // Draw trust boundaries first (background layer)
+                boundaries.forEach(boundary => {{
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', boundary.x);
+                    rect.setAttribute('y', boundary.y);
+                    rect.setAttribute('width', boundary.width);
+                    rect.setAttribute('height', boundary.height);
+                    rect.setAttribute('class', `trust-boundary-rect ${{selectedBoundary && selectedBoundary.id === boundary.id ? 'selected' : ''}}`);
+                    rect.dataset.boundaryId = boundary.id;
+                    svg.appendChild(rect);
+
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', boundary.x + 10);
+                    text.setAttribute('y', boundary.y + 20);
+                    text.setAttribute('class', 'trust-boundary-label');
+                    text.textContent = boundary.name;
+                    svg.appendChild(text);
+
+                    rect.addEventListener('mousedown', (event) => {{
+                        event.stopPropagation();
+                        isDragging = true;
+                        activeElement = rect;
+                        activeBoundaryId = boundary.id;
+                        offset.x = event.clientX - parseFloat(rect.getAttribute('x'));
+                        offset.y = event.clientY - parseFloat(rect.getAttribute('y'));
+                        selectBoundary(boundary.id);
+                    }});
+                }});
+
+                // Draw connections (middle layer)
+                connections.forEach(conn => {{
+                    const sourceNode = nodes.find(n => n.id === conn.source_id);
+                    const targetNode = nodes.find(n => n.id === conn.target_id);
+
+                    if (sourceNode && targetNode) {{
+                        const startX = sourceNode.x;
+                        const startY = sourceNode.y;
+                        const endX = targetNode.x;
+                        const endY = targetNode.y;
+
+                        const dx = endX - startX;
+                        const dy = endY - startY;
+                        const angle = Math.atan2(dy, dx);
+
+                        const adjustedStartX = startX + Math.cos(angle) * (nodeWidth / 2);
+                        const adjustedStartY = startY + Math.sin(angle) * (nodeHeight / 2);
+                        const adjustedEndX = endX - Math.cos(angle) * (nodeWidth / 2);
+                        const adjustedEndY = endY - Math.sin(angle) * (nodeHeight / 2);
+
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', adjustedStartX);
+                        line.setAttribute('y1', adjustedStartY);
+                        line.setAttribute('x2', adjustedEndX);
+                        line.setAttribute('y2', adjustedEndY);
+                        line.setAttribute('class', `diagram-edge ${{conn.trust_boundary_crossing && conn.trust_boundary_crossing !== 'N/A' ? 'boundary-cross' : ''}}`);
+                        line.setAttribute('marker-end', conn.trust_boundary_crossing && conn.trust_boundary_crossing !== 'N/A' ? 'url(#arrowhead-boundary)' : 'url(#arrowhead)');
+                        svg.appendChild(line);
+
+                        const midX = (adjustedStartX + adjustedEndX) / 2;
+                        const midY = (adjustedStartY + adjustedEndY) / 2;
+                        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        text.setAttribute('x', midX);
+                        text.setAttribute('y', midY - 10);
+                        text.setAttribute('class', 'diagram-edge-label');
+                        text.textContent = `${conn.data_flow} (${conn.trust_boundary_crossing || 'N/A'})`;
+                        svg.appendChild(text);
+                    }}
+                }});
+
+                // Draw nodes (top layer)
+                nodes.forEach(node => {{
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', node.x - nodeWidth / 2);
+                    rect.setAttribute('y', node.y - nodeHeight / 2);
+                    rect.setAttribute('width', nodeWidth);
+                    rect.setAttribute('height', nodeHeight);
+                    rect.setAttribute('rx', 10);
+                    rect.setAttribute('ry', 10);
+                    rect.setAttribute('class', `diagram-node-rect ${{selectedNode && selectedNode.id === node.id ? 'selected' : ''}}`);
+                    rect.setAttribute('fill', getNodeColor(node.type));
+                    rect.dataset.nodeId = node.id;
+                    svg.appendChild(rect);
+
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', node.x);
+                    text.setAttribute('y', node.y);
+                    text.setAttribute('class', 'diagram-node-text');
+                    text.textContent = node.name;
+                    text.dataset.nodeId = node.id;
+                    svg.appendChild(text);
+
+                    rect.addEventListener('mousedown', (event) => {{
+                        event.stopPropagation();
+                        isDragging = true;
+                        activeElement = rect;
+                        activeNodeId = node.id;
+                        offset.x = event.clientX - parseFloat(rect.getAttribute('x'));
+                        offset.y = event.clientY - parseFloat(rect.getAttribute('y'));
+                        svg.appendChild(rect);
+                        svg.appendChild(text);
+                        selectNode(node.id);
+                    }});
+                }});
+
+                updateDeleteButtonState();
+            }}
+
+            function getNodeColor(type) {{
+                switch(type) {{
+                    case 'User': return '#ff6b6b';
+                    case 'Process': return '#4ecdc4';
+                    case 'Data': return '#ffeaa7';
+                    default: return '#cccccc';
+                }}
+            }}
+
+            function selectNode(nodeId) {{
+                selectedNode = nodes.find(n => n.id === nodeId);
+                selectedBoundary = null;
+                nodes.forEach(node => {{
+                    const element = svg.querySelector(`rect[data-node-id="${node.id}"]`);
+                    if (element) {{
+                        element.classList.toggle('selected', node.id === nodeId);
+                    }}
+                }});
+                boundaries.forEach(boundary => {{
+                    const element = svg.querySelector(`rect[data-boundary-id="${boundary.id}"]`);
+                    if (element) {{
+                        element.classList.remove('selected');
+                    }}
+                }});
+                updateDeleteButtonState();
+            }}
+
+            function selectBoundary(boundaryId) {{
+                selectedBoundary = boundaries.find(b => b.id === boundaryId);
+                selectedNode = null;
+                boundaries.forEach(boundary => {{
+                    const element = svg.querySelector(`rect[data-boundary-id="${boundary.id}"]`);
+                    if (element) {{
+                        element.classList.toggle('selected', boundary.id === boundaryId);
+                    }}
+                }});
+                nodes.forEach(node => {{
+                    const element = svg.querySelector(`rect[data-node-id="${node.id}"]`);
+                    if (element) {{
+                        element.classList.remove('selected');
+                    }}
+                }});
+                updateDeleteButtonState();
+            }}
+
+            function updateDeleteButtonState() {{
+                document.getElementById('deleteSelectedBtn').disabled = !(selectedNode || selectedBoundary);
+            }}
+
+            function openModal(modalId) {{
+                document.getElementById(modalId).style.display = 'flex';
+            }}
+
+            function closeModal(modalId) {{
+                document.getElementById(modalId).style.display = 'none';
+            }}
+
+            document.getElementById('addNodeBtn').addEventListener('click', () => {{
+                const randomX = Math.random() * (svg.clientWidth - 100) + 50;
+                const randomY = Math.random() * (svg.clientHeight - 100) + 50;
+                document.getElementById('nodeName').value = '';
+                document.getElementById('nodeDescription').value = '';
+                document.getElementById('nodeType').value = 'User';
+                document.getElementById('nodeBoundary').value = '';
+                openModal('addComponentModal');
+            }});
+
+            function saveComponent() {{
+                const name = document.getElementById('nodeName').value;
+                const type = document.getElementById('nodeType').value;
+                const description = document.getElementById('nodeDescription').value;
+                const boundary = document.getElementById('nodeBoundary').value;
+                
+                if (name) {{
+                    const newId = 'node-' + Math.random().toString(36).substr(2, 9);
+                    const randomX = Math.random() * (svg.clientWidth - 100) + 50;
+                    const randomY = Math.random() * (svg.clientHeight - 100) + 50;
+                    nodes.push({{ id: newId, name, type, description, x: randomX, y: randomY, boundary }});
+                    if (boundary && boundary !== 'N/A' && !threatBoundaryNamesForDropdown.includes(boundary)) {{
+                        threatBoundaryNamesForDropdown.push(boundary);
+                    }}
+                    drawDiagram();
                     sendDataToStreamlit();
-                }
-            }
-        }
+                    closeModal('addComponentModal');
+                }} else {{
+                    alert('Component Name cannot be empty.');
+                }}
+            }}
 
-        function drawArrow(arrow) {
-            const source = elements.find(el => el.name === arrow.source);
-            const target = elements.find(el => el.name === arrow.target);
-            if (source && target) {
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('id', arrow.id);
-                line.setAttribute('x1', source.x + source.width / 2);
-                line.setAttribute('y1', source.y + source.height / 2);
-                line.setAttribute('x2', target.x + target.width / 2);
-                line.setAttribute('y2', target.y + target.height / 2);
-                line.setAttribute('stroke', '#0f1a44');
-                line.setAttribute('stroke-width', '1');
-                line.setAttribute('marker-end', 'url(#arrowhead)');
-                arrowsSvg.appendChild(line);
-            }
-        }
+            document.getElementById('addConnectionBtn').addEventListener('click', () => {{
+                const sourceSelect = document.getElementById('connSource');
+                const targetSelect = document.getElementById('connTarget');
+                sourceSelect.innerHTML = '';
+                targetSelect.innerHTML = '';
 
-        function updateArrows() {
-            while (arrowsSvg.children.length > 1) arrowsSvg.removeChild(arrowsSvg.lastChild);
-            arrows.forEach(drawArrow);
-        }
+                nodes.forEach(node => {{
+                    const option1 = document.createElement('option');
+                    option1.value = node.id;
+                    option1.textContent = node.name;
+                    sourceSelect.appendChild(option1);
 
-        function clearCanvas() {
-            history.push({ action: 'clear', elements: [...elements], arrows: [...arrows] });
-            redoStack = [];
-            elements = [];
-            arrows = [];
-            canvas.innerHTML = '';
-            while (arrowsSvg.children.length > 1) arrowsSvg.removeChild(arrowsSvg.lastChild);
-            sendDataToStreamlit();
-        }
+                    const option2 = document.createElement('option');
+                    option2.value = node.id;
+                    option2.textContent = node.name;
+                    targetSelect.appendChild(option2);
+                }});
+                document.getElementById('connDataFlow').value = '';
+                document.getElementById('connDescription').value = '';
 
-        function undo() {
-            if (history.length === 0) return;
-            const lastAction = history.pop();
-            redoStack.push(lastAction);
-            if (lastAction.action === 'add') {
-                elements = elements.filter(el => el.id !== lastAction.element.id);
-                const elem = document.getElementById(lastAction.element.id);
-                if (elem) canvas.removeChild(elem);
-            } else if (lastAction.action === 'move') {
-                const element = elements.find(el => el.id === lastAction.id);
-                if (element) {
-                    element.x = lastAction.oldX;
-                    element.y = lastAction.oldY;
-                    const elem = document.getElementById(element.id);
-                    if (elem) {
-                        elem.style.left = element.x + 'px';
-                        elem.style.top = element.y + 'px';
-                    }
-                    updateArrows();
-                }
-            } else if (lastAction.action === 'add_arrow') {
-                arrows = arrows.filter(a => a.id !== lastAction.arrow.id);
-                const line = document.getElementById(lastAction.arrow.id);
-                if (line) arrowsSvg.removeChild(line);
-            } else if (lastAction.action === 'clear') {
-                elements = [...lastAction.elements];
-                arrows = [...lastAction.arrows];
-                canvas.innerHTML = '';
-                elements.forEach(addElementToCanvas);
-                updateArrows();
-            }
-            sendDataToStreamlit();
-        }
+                const trustBoundarySelect = document.getElementById('connTrustBoundary');
+                trustBoundarySelect.innerHTML = '';
+                
+                const defaultOption = document.createElement('option');
+                defaultOption.value = "";
+                defaultOption.textContent = "-- Select or Type New --";
+                trustBoundarySelect.appendChild(defaultOption);
 
-        function redo() {
-            if (redoStack.length === 0) return;
-            const action = redoStack.pop();
-            history.push(action);
-            if (action.action === 'add') {
-                elements.push(action.element);
-                addElementToCanvas(action.element);
-            } else if (action.action === 'move') {
-                const element = elements.find(el => el.id === action.id);
-                if (element) {
-                    element.x = action.newX;
-                    element.y = action.newY;
-                    const elem = document.getElementById(element.id);
-                    if (elem) {
-                        elem.style.left = element.x + 'px';
-                        elem.style.top = element.y + 'px';
-                    }
-                    updateArrows();
-                }
-            } else if (action.action === 'add_arrow') {
-                arrows.push(action.arrow);
-                drawArrow(action.arrow);
-            } else if (action.action === 'clear') {
-                elements = [];
-                arrows = [];
-                canvas.innerHTML = '';
-                while (arrowsSvg.children.length > 1) arrowsSvg.removeChild(arrowsSvg.lastChild);
-            }
-            sendDataToStreamlit();
-        }
+                threatBoundaryNamesForDropdown.forEach(boundary => {{
+                    const option = document.createElement('option');
+                    option.value = boundary;
+                    option.textContent = boundary;
+                    trustBoundarySelect.appendChild(option);
+                }});
 
-        function showTooltip(e, text) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'aws-tooltip';
-            tooltip.innerText = text;
-            tooltip.style.left = e.pageX + 10 + 'px';
-            tooltip.style.top = e.pageY + 10 + 'px';
-            document.body.appendChild(tooltip);
-            setTimeout(() => tooltip.classList.add('show'), 10);
-        }
+                const newBoundaryTextInput = document.getElementById('newTrustBoundaryText');
+                newBoundaryTextInput.style.display = 'none';
+                newBoundaryTextInput.value = '';
 
-        function hideTooltip() {
-            const tooltip = document.querySelector('.aws-tooltip');
-            if (tooltip) document.body.removeChild(tooltip);
-        }
+                const otherOption = document.createElement('option');
+                otherOption.value = "NEW_BOUNDARY";
+                otherOption.textContent = "Other / New Boundary";
+                trustBoundarySelect.appendChild(otherOption);
 
-        function sendDataToStreamlit() {
-            if (Date.now() - lastUpdate < 1000) return;
-            lastUpdate = Date.now();
-            if (!window.Streamlit) {
-                console.warn('Streamlit not available');
-                return;
-            }
-            html2canvas(document.getElementById('canvas'), { scale: 1 }).then(canvas => {
-                const image = canvas.toDataURL('image/png');
-                window.Streamlit.setComponentValue({ 
-                    elements: elements.concat(arrows), 
-                    selected: selectedElement, 
-                    image: image 
-                });
-            }).catch(err => {
-                console.error('Error capturing canvas:', err);
-            });
-        }
+                trustBoundarySelect.onchange = function() {{
+                    if (this.value === "NEW_BOUNDARY") {{
+                        newBoundaryTextInput.style.display = 'block';
+                        newBoundaryTextInput.focus();
+                    }} else {{
+                        newBoundaryTextInput.style.display = 'none';
+                    }}
+                }};
 
-        // Initialize toolbar buttons
-        document.querySelectorAll('.aws-toolbar button').forEach(button => {
-            button.addEventListener('dragstart', e => e.dataTransfer.setData('type', e.target.dataset.type));
-            button.addEventListener('mouseover', e => showTooltip(e, e.target.getAttribute('aria-label')));
-            button.addEventListener('mouseout', hideTooltip);
-        });
+                openModal('addConnectionModal');
+            }});
 
-        window.addEventListener('message', e => {
-            if (e.data.type === 'LOAD_ELEMENTS') {
-                elements = e.data.elements.filter(el => el.type !== 'Data Flow') || [];
-                arrows = e.data.elements.filter(el => el.type === 'Data Flow') || [];
-                canvas.innerHTML = '';
-                while (arrowsSvg.children.length > 1) arrowsSvg.removeChild(arrowsSvg.lastChild);
-                elements.forEach(addElementToCanvas);
-                arrows.forEach(drawArrow);
-                sendDataToStreamlit();
-            }
-        });
+            function saveConnection() {{
+                const sourceId = document.getElementById('connSource').value;
+                const targetId = document.getElementById('connTarget').value;
+                const dataFlow = document.getElementById('connDataFlow').value;
+                const description = document.getElementById('connDescription').value;
+                
+                const trustBoundarySelect = document.getElementById('connTrustBoundary');
+                const newTrustBoundaryTextInput = document.getElementById('newTrustBoundaryText');
+                let trustBoundary = trustBoundarySelect.value;
 
-        // Initial data send
-        sendDataToStreamlit();
-    </script>
-</body>
-</html>
+                if (trustBoundary === "NEW_BOUNDARY") {{
+                    trustBoundary = newTrustBoundaryTextInput.value.trim();
+                    if (!trustBoundary) {{
+                        alert('Please enter a name for the new trust boundary.');
+                        return;
+                    }}
+                    threatBoundaryNamesForDropdown.push(trustBoundary);
+                }} else if (trustBoundary === "") {{
+                    trustBoundary = "N/A";
+                }}
+
+                if (sourceId && targetId && dataFlow && sourceId !== targetId) {{
+                    const newId = 'conn-' + Math.random().toString(36).substr(2, 9);
+                    connections.push({{ id: newId, source_id: sourceId, target_id: targetId, data_flow: dataFlow, description: description, trust_boundary_crossing: trustBoundary }});
+                    drawDiagram();
+                    sendDataToStreamlit();
+                    closeModal('addConnectionModal');
+                }} else {{
+                    alert('Please select valid and different source/target components and provide a data flow type.');
+                }}
+            }}
+
+            document.getElementById('addBoundaryBtn').addEventListener('click', () => {{
+                document.getElementById('boundaryName').value = '';
+                document.getElementById('boundaryDescription').value = '';
+                document.getElementById('boundaryX').value = 50;
+                document.getElementById('boundaryY').value = 50;
+                document.getElementById('boundaryWidth').value = 300;
+                document.getElementById('boundaryHeight').value = 200;
+                openModal('addBoundaryModal');
+            }});
+
+            function saveBoundary() {{
+                const name = document.getElementById('boundaryName').value;
+                const description = document.getElementById('boundaryDescription').value;
+                const x = parseInt(document.getElementById('boundaryX').value);
+                const y = parseInt(document.getElementById('boundaryY').value);
+                const width = parseInt(document.getElementById('boundaryWidth').value);
+                const height = parseInt(document.getElementById('boundaryHeight').value);
+
+                if (name && width >= boundaryMinWidth && height >= boundaryMinHeight) {{
+                    const newId = 'boundary-' + Math.random().toString(36).substr(2, 9);
+                    boundaries.push({{ id: newId, name, description, x, y, width, height }});
+                    threatBoundaryNamesForDropdown.push(name);
+                    drawDiagram();
+                    sendDataToStreamlit();
+                    closeModal('addBoundaryModal');
+                }} else {{
+                    alert('Boundary Name cannot be empty, and dimensions must be valid.');
+                }}
+            }}
+
+            document.getElementById('deleteSelectedBtn').addEventListener('click', () => {{
+                if (selectedNode) {{
+                    if (confirm(`Are you sure you want to delete component "${selectedNode.name}" and its associated connections?`)) {{
+                        nodes = nodes.filter(n => n.id !== selectedNode.id);
+                        connections = connections.filter(c => c.source_id !== selectedNode.id && c.target_id !== selectedNode.id);
+                        selectedNode = null;
+                        drawDiagram();
+                        sendDataToStreamlit();
+                    }}
+                }} else if (selectedBoundary) {{
+                    if (confirm(`Are you sure you want to delete trust boundary "${selectedBoundary.name}"?`)) {{
+                        boundaries = boundaries.filter(b => b.id !== selectedBoundary.id);
+                        connections.forEach(conn => {{
+                            if (conn.trust_boundary_crossing === selectedBoundary.name) {{
+                                conn.trust_boundary_crossing = 'N/A';
+                            }}
+                        }});
+                        selectedBoundary = null;
+                        drawDiagram();
+                        sendDataToStreamlit();
+                    }}
+                }}
+            }});
+
+            svg.addEventListener('mousemove', (event) => {{
+                if (!isDragging) return;
+
+                event.preventDefault();
+
+                const newX = event.clientX - offset.x;
+                const newY = event.clientY - offset.y;
+
+                if (activeNodeId) {{
+                    activeElement.setAttribute('x', newX);
+                    activeElement.setAttribute('y', newY);
+
+                    const nodeToUpdate = nodes.find(n => n.id === activeNodeId);
+                    if (nodeToUpdate) {{
+                        nodeToUpdate.x = newX + nodeWidth / 2;
+                        nodeToUpdate.y = newY + nodeHeight / 2;
+                        // Update associated boundary if node is moved
+                        boundaries.forEach(boundary => {{
+                            if (isPointInBoundary(nodeToUpdate.x, nodeToUpdate.y, boundary)) {{
+                                nodeToUpdate.boundary = boundary.name;
+                            }} else if (nodeToUpdate.boundary === boundary.name) {{
+                                nodeToUpdate.boundary = '';
+                            }}
+                        }});
+                    }}
+
+                    const textElement = svg.querySelector(`text[data-node-id="${activeNodeId}"]`);
+                    if (textElement) {{
+                        textElement.setAttribute('x', newX + nodeWidth / 2);
+                        textElement.setAttribute('y', newY + nodeHeight / 2);
+                    }}
+                }} else if (activeBoundaryId) {{
+                    activeElement.setAttribute('x', newX);
+                    activeElement.setAttribute('y', newY);
+
+                    const boundaryToUpdate = boundaries.find(b => b.id === activeBoundaryId);
+                    if (boundaryToUpdate) {{
+                        boundaryToUpdate.x = newX;
+                        boundaryToUpdate.y = newY;
+                        // Update nodes within boundary
+                        nodes.forEach(node => {{
+                            if (isPointInBoundary(node.x, node.y, boundaryToUpdate)) {{
+                                node.boundary = boundaryToUpdate.name;
+                            }} else if (node.boundary === boundaryToUpdate.name) {{
+                                node.boundary = '';
+                            }}
+                        }});
+                    }}
+
+                    const textElement = svg.querySelector(`text[data-boundary-id="${activeBoundaryId}"]`);
+                    if (textElement) {{
+                        textElement.setAttribute('x', newX + 10);
+                        textElement.setAttribute('y', newY + 20);
+                    }}
+                }}
+
+                drawDiagram();
+            }});
+
+            svg.addEventListener('mouseup', () => {{
+                if (isDragging) {{
+                    isDragging = false;
+                    activeElement = null;
+                    activeNodeId = null;
+                    activeBoundaryId = null;
+                    sendDataToStreamlit();
+                }}
+            }});
+
+            svg.addEventListener('click', () => {{
+                selectedNode = null;
+                selectedBoundary = null;
+                drawDiagram();
+            }});
+
+            drawDiagram();
+        </script>
+    </body>
+    </html>
+
+
+    st.components.v1.html(diagram_html, height=600, scrolling=False)
+
+    architecture_data_json = st.text_area("architecture_data_transfer", value=json.dumps(st.session_state.architecture), height=68, key
