@@ -1,3 +1,4 @@
+
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -374,24 +375,16 @@ def render_diagram():
             name=comp['name']
         ))
     fig.update_layout(
-        showlegend=False, dragmode="pan", clickmode="event+select",
+        showlegend=False,
+        dragmode="pan",
         xaxis=dict(range=[0, 1200], showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(range=[0, 600], showgrid=False, zeroline=False, showticklabels=False, scaleanchor="x", scaleratio=1),
-        height=600, margin=dict(l=10, r=10, t=10, b=10),
+        height=600,
+        margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="#f9f9f9"
     )
-    # Handle click and drag
     config = {"scrollZoom": True}
-    plot = st.plotly_chart(fig, use_container_width=True, config=config)
-    if plot:
-        selected_points = plot.get("selections", [])
-        if selected_points:
-            selected_id = selected_points[0].get("customdata", [None])[0]
-            st.session_state.selected_node = next((c for c in st.session_state.architecture['components'] if c['id'] == selected_id), None)
-            st.session_state.selected_boundary = None
-        else:
-            st.session_state.selected_node = None
-            st.session_state.selected_boundary = None
+    st.plotly_chart(fig, use_container_width=True, config=config)
     return fig
 
 def main():
@@ -424,8 +417,17 @@ def main():
 
     if app_mode == "Architecture":
         st.subheader("🏗️ 1. Define System Architecture (Scope)")
-        st.write("Add components, connections, and trust boundaries. Click and drag components in the diagram.")
+        st.write("Add components, connections, and trust boundaries. Use the dropdown to select a component for editing.")
         render_diagram()
+        
+        # Component selection dropdown
+        components = {c['name']: c for c in st.session_state.architecture['components']}
+        selected_component_name = st.selectbox("Select Component to Edit", [""] + list(components.keys()), key="component_selector")
+        if selected_component_name:
+            st.session_state.selected_node = components[selected_component_name]
+        else:
+            st.session_state.selected_node = None
+
         col1, col2, col3 = st.columns(3)
         with col1:
             with st.form("add_component_form", clear_on_submit=True):
@@ -448,16 +450,16 @@ def main():
         with col2:
             with st.form("add_connection_form", clear_on_submit=True):
                 st.write("**Add Connection**")
-                components = {c['name']: c['id'] for c in st.session_state.architecture['components']}
-                source = st.selectbox("Source Component", components.keys())
-                target = st.selectbox("Target Component", components.keys())
+                components_dict = {c['name']: c['id'] for c in st.session_state.architecture['components']}
+                source = st.selectbox("Source Component", components_dict.keys())
+                target = st.selectbox("Target Component", components_dict.keys())
                 data_flow = st.text_input("Data Flow Type (e.g., HTTP/S)")
                 description = st.text_area("Description")
                 trust_boundary = st.selectbox("Trust Boundary Crossed", [""] + list(st.session_state.threat_model.keys()))
                 if st.form_submit_button("Add Connection"):
                     if source and target and data_flow and source != target:
                         st.session_state.architecture['connections'].append({
-                            'id': str(uuid.uuid4()), 'source_id': components[source], 'target_id': components[target],
+                            'id': str(uuid.uuid4()), 'source_id': components_dict[source], 'target_id': components_dict[target],
                             'data_flow': data_flow, 'description': description, 'trust_boundary_crossing': trust_boundary or "N/A"
                         })
                         st.rerun()
